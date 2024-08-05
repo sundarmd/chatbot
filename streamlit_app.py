@@ -51,21 +51,12 @@ def main():
             merged_df = pd.concat([df1, df2], ignore_index=True)
 
             # Display the merged dataframe in an expander
-            with st.expander("Your Data"):
+            with st.expander("Merged Data", expanded=False):
                 page_size = 100
                 page_number = st.number_input("Page", min_value=1, value=1)
                 start = (page_number - 1) * page_size
                 end = start + page_size
                 st.write(merged_df.iloc[start:end])
-
-                # Option to download the merged CSV
-                csv = merged_df.to_csv(index=False)
-                st.download_button(
-                    label="Download merged CSV",
-                    data=csv,
-                    file_name="merged_data.csv",
-                    mime="text/csv",
-                )
 
             # Visualization section
             st.header("Data Visualization")
