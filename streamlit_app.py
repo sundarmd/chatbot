@@ -3,7 +3,7 @@ import pandas as pd
 import openai
 
 def main():
-    st.title("Generative Data Visualization")
+    st.title("Generative Data Visualization Tool")
 
     # Add a sidebar
     st.sidebar.header("Settings")
@@ -93,7 +93,7 @@ The visualization should be created using D3.js. Please provide only the JavaScr
         else:
             st.warning("Please enter your OpenAI API key in the sidebar to generate visualizations.")
     else:
-        st.info("Please upload both CSV files to merge them and create visualizations.")
+        st.info("Please upload both CSV files to generate and modify comparative visualizations")
 
     # Additional settings or options
     st.sidebar.checkbox("Enable advanced features")
