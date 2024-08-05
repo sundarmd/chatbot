@@ -93,7 +93,7 @@ The visualization should be created using D3.js. Please provide only the JavaScr
         else:
             st.warning("Please enter your OpenAI API key in the sidebar to generate visualizations.")
     else:
-        st.info("Please upload both CSV files to generate and modify comparative visualizations")
+        st.info("Please upload both CSV files to visualize your data")
 
     # Additional settings or options
     st.sidebar.checkbox("Enable advanced features")
