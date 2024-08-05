@@ -1,56 +1,105 @@
 import streamlit as st
-from openai import OpenAI
+import pandas as pd
+import openai
 
-# Show title and description.
-st.title("💬 Chatbot")
-st.write(
-    "This is a simple chatbot that uses OpenAI's GPT-3.5 model to generate responses. "
-    "To use this app, you need to provide an OpenAI API key, which you can get [here](https://platform.openai.com/account/api-keys). "
-    "You can also learn how to build this app step by step by [following our tutorial](https://docs.streamlit.io/develop/tutorials/llms/build-conversational-apps)."
-)
+def main():
+    st.title("CSV File Merger and Visualization")
 
-# Ask user for their OpenAI API key via `st.text_input`.
-# Alternatively, you can store the API key in `./.streamlit/secrets.toml` and access it
-# via `st.secrets`, see https://docs.streamlit.io/develop/concepts/connections/secrets-management
-openai_api_key = st.text_input("OpenAI API Key", type="password")
-if not openai_api_key:
-    st.info("Please add your OpenAI API key to continue.", icon="🗝️")
-else:
+    # Add a sidebar
+    st.sidebar.header("Settings")
+    api_key = st.sidebar.text_input("Enter your OpenAI API Key", type="password")
 
-    # Create an OpenAI client.
-    client = OpenAI(api_key=openai_api_key)
+    # File upload section
+    st.header("Upload CSV Files")
+    file1 = st.file_uploader("Upload first CSV file", type="csv")
+    file2 = st.file_uploader("Upload second CSV file", type="csv")
 
-    # Create a session state variable to store the chat messages. This ensures that the
-    # messages persist across reruns.
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
+    if file1 and file2:
+        # Read CSV files into pandas dataframes
+        df1 = pd.read_csv(file1)
+        df2 = pd.read_csv(file2)
 
-    # Display the existing chat messages via `st.chat_message`.
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+        # Add a column to specify the source file
+        df1['Source'] = 'CSV file 1'
+        df2['Source'] = 'CSV file 2'
 
-    # Create a chat input field to allow the user to enter a message. This will display
-    # automatically at the bottom of the page.
-    if prompt := st.chat_input("What is up?"):
+        # Merge the dataframes
+        merged_df = pd.concat([df1, df2], ignore_index=True)
 
-        # Store and display the current prompt.
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
+        # Display the merged dataframe
+        st.header("Merged Data")
+        st.write(merged_df)
 
-        # Generate a response using the OpenAI API.
-        stream = client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": m["role"], "content": m["content"]}
-                for m in st.session_state.messages
-            ],
-            stream=True,
+        # Option to download the merged CSV
+        csv = merged_df.to_csv(index=False)
+        st.download_button(
+            label="Download merged CSV",
+            data=csv,
+            file_name="merged_data.csv",
+            mime="text/csv",
         )
 
-        # Stream the response to the chat using `st.write_stream`, then store it in 
-        # session state.
-        with st.chat_message("assistant"):
-            response = st.write_stream(stream)
-        st.session_state.messages.append({"role": "assistant", "content": response})
+        # Visualization section
+        st.header("Data Visualization")
+        if api_key:
+            openai.api_key = api_key
+            visualization_type = st.selectbox("Select visualization type", 
+                ["Bar Chart", "Scatter Plot", "Line Chart", "Comparative Visualization"])
+            
+            if visualization_type == "Comparative Visualization":
+                comparison_type = st.selectbox("Select comparison type", 
+                    ["Superposition", "Juxtaposition", "Explicit Encoding"])
+            
+            user_input = st.text_area("Describe the visualization you want")
+
+            # Initialize session state for workflow history
+            if 'workflow_history' not in st.session_state:
+                st.session_state.workflow_history = []
+
+            if st.button("Generate Visualization"):
+                prompt = f"""You are an expert at data visualization who regularly helps people to make sense of their data by creating beautiful visualizations that answers their questions meaningfully. You are an absolute expert at creating comparative visualizations (superposition, juxtaposition, explicit encoding) using d3.js code.
+
+Please create a {visualization_type} {"with " + comparison_type if visualization_type == "Comparative Visualization" else ""} based on the following description:
+
+{user_input}
+
+The visualization should be created using D3.js. Please provide only the JavaScript code for the visualization."""
+
+                response = openai.Completion.create(
+                    engine="text-davinci-002",
+                    prompt=prompt,
+                    max_tokens=1000,
+                    n=1,
+                    stop=None,
+                    temperature=0.7,
+                )
+
+                d3_code = response.choices[0].text.strip()
+                st.session_state.workflow_history.append(d3_code)
+
+            # Display workflow history
+            st.subheader("Workflow History")
+            for i, code in enumerate(st.session_state.workflow_history):
+                st.text(f"Version {i+1}")
+                edited_code = st.text_area(f"Edit code for version {i+1}", value=code, height=300, key=f"code_{i}")
+                if st.button(f"Execute Version {i+1}"):
+                    st.session_state.workflow_history[i] = edited_code
+                    d3_code = edited_code
+
+            if 'workflow_history' in st.session_state and st.session_state.workflow_history:
+                st.subheader("Current D3.js Visualization")
+                st.code(d3_code, language="javascript")
+                st.components.v1.html(f"<script src='https://d3js.org/d3.v7.min.js'></script><div id='visualization'></div><script>{d3_code}</script>", height=600)
+        else:
+            st.warning("Please enter your OpenAI API key in the sidebar to generate visualizations.")
+    else:
+        st.info("Please upload both CSV files to merge them and create visualizations.")
+
+    # Additional settings or options
+    st.sidebar.checkbox("Enable advanced features")
+
+    model_options = ["GPT-3.5", "GPT-4", "Other"]
+    selected_model = st.sidebar.selectbox("Choose a model", model_options)
+
+if __name__ == "__main__":
+    main()
