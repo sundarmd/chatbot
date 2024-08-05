@@ -3,7 +3,7 @@ import pandas as pd
 import openai
 
 def main():
-    st.title("Generative Data Visualization Tool")
+    st.title("Generative Data Visualization")
 
     # Add a sidebar
     st.sidebar.header("Settings")
