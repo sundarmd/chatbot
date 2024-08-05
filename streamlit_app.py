@@ -3,7 +3,7 @@ import pandas as pd
 import openai
 
 def main():
-    st.title("Compare View")
+    st.title("ChartChat")
 
     # Add a sidebar
     st.sidebar.header("Settings")
