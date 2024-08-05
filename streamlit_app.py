@@ -3,7 +3,7 @@ import pandas as pd
 import openai
 
 def main():
-    st.title("CSV File Merger and Visualization")
+    st.title("Generative Data Visualization Tool")
 
     # Add a sidebar
     st.sidebar.header("Settings")
