@@ -70,25 +70,21 @@ def main():
             st.header("Data Visualization")
             if api_key:
                 openai.api_key = api_key
-                visualization_type = st.selectbox("Select visualization type", 
-                    ["Bar Chart", "Scatter Plot", "Line Chart", "Comparative Visualization"])
                 
-                if visualization_type == "Comparative Visualization":
-                    comparison_type = st.selectbox("Select comparison type", 
-                        ["Superposition", "Juxtaposition", "Explicit Encoding"])
-                
-                user_input = st.text_area("Describe the visualization you want")
+                user_input = st.text_area("Describe the comparative visualization you want")
 
                 # Initialize session state for workflow history
                 if 'workflow_history' not in st.session_state:
                     st.session_state.workflow_history = []
 
                 if st.button("Generate Visualization"):
-                    prompt = f"""You are a helpful assistant highly skilled in writing PERFECT code for visualizations. Given some code template, you complete the template to generate a visualization given the dataset and the goal described. The code you write MUST FOLLOW VISUALIZATION BEST PRACTICES ie. meet the specified goal, apply the right transformation, use the right visualization type, use the right data encoding, and use the right aesthetics (e.g., ensure axis are legible). The transformations you apply MUST be correct and the fields you use MUST be correct. The visualization CODE MUST BE CORRECT and MUST NOT CONTAIN ANY SYNTAX OR LOGIC ERRORS (e.g., it must consider the field types and use them correctly). You MUST first generate a brief plan for how you would solve the task e.g. what transformations you would apply e.g. if you need to construct a new column, what fields you would use, what visualization type you would use, what aesthetics you would use, etc.
+                    prompt = f"""You are a helpful assistant highly skilled in writing PERFECT code for visualizations. Given some code template, you complete the template to generate a COMPARATIVE visualization given the dataset and the goal described. The code you write MUST FOLLOW VISUALIZATION BEST PRACTICES ie. meet the specified goal, apply the right transformation, use the right visualization type, use the right data encoding, and use the right aesthetics (e.g., ensure axis are legible). The transformations you apply MUST be correct and the fields you use MUST be correct. The visualization CODE MUST BE CORRECT and MUST NOT CONTAIN ANY SYNTAX OR LOGIC ERRORS (e.g., it must consider the field types and use them correctly). You MUST first generate a brief plan for how you would solve the task e.g. what transformations you would apply e.g. if you need to construct a new column, what fields you would use, what visualization type you would use, what aesthetics you would use, etc.
 
-    Please create a {visualization_type} {"with " + comparison_type if visualization_type == "Comparative Visualization" else ""} based on the following description:
+    Please create a COMPARATIVE visualization based on the following description:
 
     {user_input}
+
+    The visualization MUST be comparative in nature, comparing data from both CSV files. If the user specifies a particular chart type (e.g., bar chart, line chart), use that type. If not specified, choose the most appropriate type for a comparative visualization.
 
     Always add a legend with various colors where appropriate. The visualization code MUST only use data fields that exist in the dataset (field_names) or fields that are transformations based on existing field_names). Only use variables that have been defined in the code or are in the dataset summary. You MUST return a FULL d3.js PROGRAM ENCLOSED IN BACKTICKS ``` that starts with an import statement. DO NOT add any explanation.
 
@@ -114,30 +110,7 @@ def main():
     // Read the data
     const data = {merged_df.to_json(orient='records')}
 
-    // Add X axis
-    const x = d3.scaleLinear()
-      .domain([0, 4000])
-      .range([ 0, width ]);
-    svg.append("g")
-      .attr("transform", `translate(0, ${{height}})`)
-      .call(d3.axisBottom(x));
-
-    // Add Y axis
-    const y = d3.scaleLinear()
-      .domain([0, 500000])
-      .range([ height, 0]);
-    svg.append("g")
-      .call(d3.axisLeft(y));
-
-    // Add dots
-    svg.append('g')
-      .selectAll("dot")
-      .data(data)
-      .join("circle")
-        .attr("cx", function (d) {{ return x(d.GrLivArea); }} )
-        .attr("cy", function (d) {{ return y(d.SalePrice); }} )
-        .attr("r", 1.5)
-        .style("fill", "#69b3a2")
+    // Add your comparative visualization code here
     ```
 
     The FINAL COMPLETED CODE BASED ON THE TEMPLATE above is ...
