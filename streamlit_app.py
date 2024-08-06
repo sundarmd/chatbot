@@ -21,7 +21,7 @@ def main():
         st.sidebar.warning("It's recommended to use environment variables for API keys.")
 
     # Additional settings or options
-    advanced_features = st.sidebar.checkbox("Enable advanced features")
+    #advanced_features = st.sidebar.checkbox("Enable advanced features")
 
     if advanced_features:
         st.sidebar.subheader("Advanced Settings")
@@ -49,15 +49,15 @@ def main():
 
             # Merge the dataframes
             merged_df = pd.concat([df1, df2], ignore_index=True)
-
-            # Display the merged dataframe in an expander
-            with st.expander("Merged Data", expanded=False):
-                page_size = 100
-                page_number = st.number_input("Page", min_value=1, value=1)
-                start = (page_number - 1) * page_size
-                end = start + page_size
-                st.write(merged_df.iloc[start:end])
-
+            
+            # # Display the merged dataframe in an expander
+            # with st.expander("Merged Data", expanded=False):
+            #     page_size = 100
+            #     page_number = st.number_input("Page", min_value=1, value=1)
+            #     start = (page_number - 1) * page_size
+            #     end = start + page_size
+            #     st.write(merged_df.iloc[start:end])
+            
             # Visualization section
             st.header("Data Visualization")
             openai.api_key = api_key
@@ -213,4 +213,4 @@ def main():
         st.info("Please upload both CSV files and provide an API key to visualize your data")
 
 if __name__ == "__main__":
-    main()
+    main() 
