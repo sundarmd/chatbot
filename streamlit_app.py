@@ -2,11 +2,31 @@ import streamlit as st
 import pandas as pd
 import openai
 import os
-from dotenv import load_dotenv
 import json
 
-# Load environment variables
-load_dotenv()
+# Try to import dotenv, but don't fail if it's not installed
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
+def get_api_key():
+    """Retrieve the API key from various possible sources."""
+    # Try to get the API key from Streamlit secrets
+    api_key = st.secrets.get("OPENAI_API_KEY")
+    
+    # If not in secrets, try environment variables
+    if not api_key:
+        api_key = os.getenv("OPENAI_API_KEY")
+    
+    # If still not found, prompt the user
+    if not api_key:
+        api_key = st.sidebar.text_input("Enter your OpenAI API Key", type="password")
+        if api_key:
+            st.sidebar.warning("It's recommended to use environment variables or Streamlit secrets for API keys.")
+    
+    return api_key
 
 def main():
     st.title("ChartChat")
@@ -14,11 +34,8 @@ def main():
     # Add a sidebar
     st.sidebar.header("Settings")
     
-    # Use environment variable for API key
-    api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key:
-        api_key = st.sidebar.text_input("Enter your OpenAI API Key", type="password")
-        st.sidebar.warning("It's recommended to use environment variables for API keys.")
+    # Get the API key
+    api_key = get_api_key()
 
     # File upload section
     st.header("Upload CSV Files")
