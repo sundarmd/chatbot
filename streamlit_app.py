@@ -55,17 +55,6 @@ def main():
             # Merge the dataframes
             merged_df = pd.concat([df1, df2], ignore_index=True)
             
-            # Download button for merged CSV
-            st.download_button(
-                label="Download merged CSV",
-                data=merged_df.to_csv(index=False),
-                file_name="merged_data.csv",
-                mime="text/csv",
-            )
-            
-            # Visualization section
-            st.header("Data Visualization")
-
             # Initialize session state for workflow history
             if 'workflow_history' not in st.session_state:
                 st.session_state.workflow_history = []
@@ -101,6 +90,14 @@ def main():
                         display_visualization(code_editor)
                         st.session_state.workflow_history[i] = code_editor
 
+            # Chat with LLM to modify visualization
+            st.subheader("Chat to Modify Visualization")
+            user_input = st.text_input("Enter your modification request:")
+            if st.button("Send Request"):
+                modified_d3_code = modify_visualization(merged_df, api_key, user_input, initial_d3_code)
+                st.session_state.workflow_history.append(modified_d3_code)
+                display_visualization(modified_d3_code)
+
         except Exception as e:
             st.error(f"An error occurred while processing the CSV files: {str(e)}")
     else:
@@ -128,6 +125,7 @@ def generate_d3_code(df, api_key):
     4. Make the chart responsive and fit well within a Streamlit app.
     5. Use appropriate scales based on the data types.
     6. Include a legend to distinguish between different data sources or categories.
+    7. Ensure the code is bug-free and handles potential errors gracefully.
     
     Please provide the complete D3.js code that can be directly used in a Streamlit component.
     """
@@ -147,6 +145,36 @@ def generate_d3_code(df, api_key):
     except Exception as e:
         st.error(f"An error occurred while generating the D3.js code: {str(e)}")
         return ""
+
+def modify_visualization(df, api_key, user_input, current_code):
+    openai.api_key = api_key
+    
+    prompt = f"""
+    Modify the following D3.js code based on the user's request:
+
+    User request: {user_input}
+
+    Current D3.js code:
+    {current_code}
+
+    Please provide the modified D3.js code that incorporates the user's request while maintaining the existing functionality.
+    """
+
+    try:
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "You are a D3.js expert. Modify the given code based on the user's request."},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=1500,
+            n=1,
+            temperature=0.7,
+        )
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        st.error(f"An error occurred while modifying the D3.js code: {str(e)}")
+        return current_code
 
 def display_visualization(d3_code):
     st.components.v1.html(f"""
