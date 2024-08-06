@@ -55,10 +55,6 @@ def main():
             # Merge the dataframes
             merged_df = pd.concat([df1, df2], ignore_index=True)
             
-            # Display the merged dataframe
-            st.subheader("Merged Data")
-            st.dataframe(merged_df)
-            
             # Download button for merged CSV
             st.download_button(
                 label="Download merged CSV",
