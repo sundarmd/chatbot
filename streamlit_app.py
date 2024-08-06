@@ -20,18 +20,6 @@ def main():
         api_key = st.sidebar.text_input("Enter your OpenAI API Key", type="password")
         st.sidebar.warning("It's recommended to use environment variables for API keys.")
 
-    # Additional settings or options
-    #advanced_features = st.sidebar.checkbox("Enable advanced features")
-
-    if advanced_features:
-        st.sidebar.subheader("Advanced Settings")
-        model_options = ["gpt-3.5-turbo", "gpt-4", "Other"]
-        selected_model = st.sidebar.selectbox("Choose a model", model_options)
-        if selected_model == "Other":
-            custom_model = st.sidebar.text_input("Enter custom model name")
-        
-        # Add more advanced features here
-
     # File upload section
     st.header("Upload CSV Files")
     file1 = st.file_uploader("Upload first CSV file", type="csv")
@@ -50,167 +38,109 @@ def main():
             # Merge the dataframes
             merged_df = pd.concat([df1, df2], ignore_index=True)
             
-            # # Display the merged dataframe in an expander
-            # with st.expander("Merged Data", expanded=False):
-            #     page_size = 100
-            #     page_number = st.number_input("Page", min_value=1, value=1)
-            #     start = (page_number - 1) * page_size
-            #     end = start + page_size
-            #     st.write(merged_df.iloc[start:end])
+            # Display the merged dataframe
+            st.subheader("Merged Data")
+            st.dataframe(merged_df)
+            
+            # Download button for merged CSV
+            st.download_button(
+                label="Download merged CSV",
+                data=merged_df.to_csv(index=False),
+                file_name="merged_data.csv",
+                mime="text/csv",
+            )
             
             # Visualization section
             st.header("Data Visualization")
-            openai.api_key = api_key
 
             # Initialize session state for workflow history
             if 'workflow_history' not in st.session_state:
                 st.session_state.workflow_history = []
 
-            # Generate initial visualization
-            initial_prompt = f"""Generate a simple comparative visualization using D3.js for the merged dataset. 
-            The visualization should compare data from both CSV files. Choose an appropriate chart type for a general comparison.
-            Use the following template and modify the specified parts:
+            # Generate initial line chart visualization using LLM
+            initial_d3_code = generate_d3_code(merged_df, api_key)
+            st.session_state.workflow_history.append(initial_d3_code)
 
-            ```
-            // Import D3.js
-            import * as d3 from "https://cdn.jsdelivr.net/npm/d3@7/+esm";
+            # Display initial visualization
+            st.subheader("Initial Line Chart Visualization")
+            display_visualization(initial_d3_code)
 
-            // Set the dimensions and margins of the graph
-            const margin = {{top: 10, right: 30, bottom: 30, left: 60}},
-                width = 460 - margin.left - margin.right,
-                height = 400 - margin.top - margin.bottom;
+            # Display and edit code
+            with st.expander("View/Edit Visualization Code"):
+                code_editor = st.text_area("D3.js Code", value=initial_d3_code, height=300)
+                col1, col2 = st.columns(2)
+                with col1:
+                    editable = st.toggle("Make Code Editable")
+                with col2:
+                    if st.button("Execute Code"):
+                        if editable:
+                            st.session_state.workflow_history.append(code_editor)
+                            display_visualization(code_editor)
+                        else:
+                            st.warning("Enable 'Make Code Editable' to execute changes.")
 
-            // Append the svg object to the body of the page
-            const svg = d3.select("#visualization")
-              .append("svg")
-                .attr("width", width + margin.left + margin.right)
-                .attr("height", height + margin.top + margin.bottom)
-              .append("g")
-                .attr("transform", `translate(${{margin.left}},${{margin.top}})`);
-
-            // Read the data
-            const data = {json.dumps(merged_df.to_dict(orient='records'))}
-
-            // Add your comparative visualization code here
-            ```
-
-            The FINAL COMPLETED CODE BASED ON THE TEMPLATE above is ...
-            """
-
-            try:
-                model_to_use = custom_model if advanced_features and selected_model == "Other" else (selected_model if advanced_features else "gpt-3.5-turbo")
-
-                response = openai.ChatCompletion.create(
-                    model=model_to_use,
-                    messages=[
-                        {"role": "system", "content": "You are a helpful assistant that generates D3.js visualizations."},
-                        {"role": "user", "content": initial_prompt}
-                    ],
-                    max_tokens=1000,
-                    n=1,
-                    temperature=0.7,
-                )
-
-                initial_d3_code = response.choices[0].message.content.strip()
-                st.session_state.workflow_history.append(initial_d3_code)
-
-                # Display initial visualization
-                st.subheader("Initial Comparative Visualization")
-                st.components.v1.html(f"""
-                    <script src='https://d3js.org/d3.v7.min.js'></script>
-                    <div id='visualization'></div>
-                    <script>{initial_d3_code}</script>
-                """, height=600, scrolling=True, sandbox="allow-scripts")
-
-            except Exception as e:
-                st.error(f"An error occurred while generating the initial visualization: {str(e)}")
-
-            # Display workflow history in an expander
-            with st.expander("Workflow History"):
-                for i, code in enumerate(st.session_state.workflow_history):
-                    st.text(f"Version {i+1}")
-                    edited_code = st.text_area(f"Edit code for version {i+1}", value=code, height=300, key=f"code_{i}")
+            # Display workflow history
+            st.subheader("Workflow History")
+            for i, code in enumerate(st.session_state.workflow_history):
+                with st.expander(f"Version {i+1}"):
+                    code_editor = st.text_area(f"Code Version {i+1}", value=code, height=300, key=f"history_{i}")
                     if st.button(f"Execute Version {i+1}"):
-                        st.session_state.workflow_history[i] = edited_code
-                        d3_code = edited_code
-                        st.subheader(f"D3.js Visualization (Version {i+1})")
-                        st.components.v1.html(f"""
-                            <script src='https://d3js.org/d3.v7.min.js'></script>
-                            <div id='visualization'></div>
-                            <script>{d3_code}</script>
-                        """, height=600, scrolling=True, sandbox="allow-scripts")
-
-            # User input for new visualizations
-            user_input = st.text_area("Describe a new comparative visualization you want")
-            if st.button("Generate New Visualization"):
-                new_prompt = f"""You are a helpful assistant highly skilled in writing PERFECT code for visualizations. Given some code template, you complete the template to generate a COMPARATIVE visualization given the dataset and the goal described. The code you write MUST FOLLOW VISUALIZATION BEST PRACTICES ie. meet the specified goal, apply the right transformation, use the right visualization type, use the right data encoding, and use the right aesthetics (e.g., ensure axis are legible). The transformations you apply MUST be correct and the fields you use MUST be correct. The visualization CODE MUST BE CORRECT and MUST NOT CONTAIN ANY SYNTAX OR LOGIC ERRORS (e.g., it must consider the field types and use them correctly). You MUST first generate a brief plan for how you would solve the task e.g. what transformations you would apply e.g. if you need to construct a new column, what fields you would use, what visualization type you would use, what aesthetics you would use, etc.
-
-                Please create a COMPARATIVE visualization based on the following description:
-
-                {user_input}
-
-                The visualization MUST be comparative in nature, comparing data from both CSV files. If the user specifies a particular chart type (e.g., bar chart, line chart), use that type. If not specified, choose the most appropriate type for a comparative visualization.
-
-                Always add a legend with various colors where appropriate. The visualization code MUST only use data fields that exist in the dataset (field_names) or fields that are transformations based on existing field_names). Only use variables that have been defined in the code or are in the dataset summary. You MUST return a FULL d3.js PROGRAM ENCLOSED IN BACKTICKS ``` that starts with an import statement. DO NOT add any explanation.
-
-                THE GENERATED CODE SOLUTION SHOULD BE CREATED BY MODIFYING THE SPECIFIED PARTS OF THE TEMPLATE BELOW
-
-                ```
-                // Import D3.js
-                import * as d3 from "https://cdn.jsdelivr.net/npm/d3@7/+esm";
-
-                // Set the dimensions and margins of the graph
-                const margin = {{top: 10, right: 30, bottom: 30, left: 60}},
-                    width = 460 - margin.left - margin.right,
-                    height = 400 - margin.top - margin.bottom;
-
-                // Append the svg object to the body of the page
-                const svg = d3.select("#visualization")
-                  .append("svg")
-                    .attr("width", width + margin.left + margin.right)
-                    .attr("height", height + margin.top + margin.bottom)
-                  .append("g")
-                    .attr("transform", `translate(${{margin.left}},${{margin.top}})`);
-
-                // Read the data
-                const data = {json.dumps(merged_df.to_dict(orient='records'))}
-
-                // Add your comparative visualization code here
-                ```
-
-                The FINAL COMPLETED CODE BASED ON THE TEMPLATE above is ...
-                """
-
-                try:
-                    response = openai.ChatCompletion.create(
-                        model=model_to_use,
-                        messages=[
-                            {"role": "system", "content": "You are a helpful assistant that generates D3.js visualizations."},
-                            {"role": "user", "content": new_prompt}
-                        ],
-                        max_tokens=1000,
-                        n=1,
-                        temperature=0.7,
-                    )
-
-                    new_d3_code = response.choices[0].message.content.strip()
-                    st.session_state.workflow_history.append(new_d3_code)
-
-                    # Display new visualization
-                    st.subheader("New D3.js Visualization")
-                    st.components.v1.html(f"""
-                        <script src='https://d3js.org/d3.v7.min.js'></script>
-                        <div id='visualization'></div>
-                        <script>{new_d3_code}</script>
-                    """, height=600, scrolling=True, sandbox="allow-scripts")
-
-                except Exception as e:
-                    st.error(f"An error occurred while generating the new visualization: {str(e)}")
+                        display_visualization(code_editor)
+                        st.session_state.workflow_history[i] = code_editor
 
         except Exception as e:
             st.error(f"An error occurred while processing the CSV files: {str(e)}")
     else:
         st.info("Please upload both CSV files and provide an API key to visualize your data")
 
+def generate_d3_code(df, api_key):
+    openai.api_key = api_key
+    
+    # Prepare data summary
+    columns = df.columns.tolist()
+    data_types = df.dtypes.to_dict()
+    data_sample = df.head(5).to_dict(orient='records')
+    
+    prompt = f"""
+    Generate a D3.js line chart code for the following dataset:
+    
+    Columns: {columns}
+    Data types: {data_types}
+    Sample data: {json.dumps(data_sample)}
+    
+    Requirements:
+    1. Create a line chart comparing data from both CSV files.
+    2. Use distinct and meaningful color coding for different lines.
+    3. Add appropriate labels for axes and legend.
+    4. Make the chart responsive and fit well within a Streamlit app.
+    5. Use appropriate scales based on the data types.
+    6. Include a legend to distinguish between different data sources or categories.
+    
+    Please provide the complete D3.js code that can be directly used in a Streamlit component.
+    """
+
+    try:
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "You are a D3.js expert. Generate only the code without any explanations."},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=1500,
+            n=1,
+            temperature=0.7,
+        )
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        st.error(f"An error occurred while generating the D3.js code: {str(e)}")
+        return ""
+
+def display_visualization(d3_code):
+    st.components.v1.html(f"""
+        <script src='https://d3js.org/d3.v7.min.js'></script>
+        <div id='visualization'></div>
+        <script>{d3_code}</script>
+    """, height=600, scrolling=True, sandbox="allow-scripts")
+
 if __name__ == "__main__":
-    main() 
+    main()
