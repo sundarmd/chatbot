@@ -61,14 +61,13 @@ def generate_d3_code(df, api_key, user_input=""):
     columns = df.columns.tolist()[:2]
     data_sample = df.to_dict(orient='records')
     
-    # If there's a user input, use OpenAI to modify the existing code
     if user_input:
         client = OpenAI(api_key=api_key)
         prompt = f"Modify the following D3.js code according to this request: {user_input}\n\nExisting code:\n{st.session_state.current_viz}"
         response = client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[
-                {"role": "system", "content": "You are a D3.js expert. Modify the given code according to the user's request."},
+                {"role": "system", "content": "You are a D3.js expert. Modify the given code according to the user's request. Return only the modified D3.js code."},
                 {"role": "user", "content": prompt}
             ]
         )
@@ -190,7 +189,7 @@ def main():
             with st.expander("Preview of preprocessed data"):
                 st.dataframe(st.session_state.preprocessed_df.head())
             
-            if st.session_state.current_viz is None:
+            if 'current_viz' not in st.session_state:
                 initial_d3_code = generate_d3_code(st.session_state.preprocessed_df, api_key)
                 st.session_state.current_viz = initial_d3_code
                 st.session_state.workflow_history.append({
@@ -199,20 +198,24 @@ def main():
                 })
 
             st.subheader("Current Visualization")
-            display_visualization(st.session_state.current_viz)
+            viz_placeholder = st.empty()
+            viz_placeholder.write(display_visualization(st.session_state.current_viz))
 
             st.subheader("Modify Visualization")
-            st.write("Press Enter to submit your request and update the visualization.")
-            user_input = st.text_input("Enter your modification request:", key="user_input")
-            if user_input:  # This will trigger when the user presses Enter
-                modified_d3_code = generate_d3_code(st.session_state.preprocessed_df, api_key, user_input)
-                st.session_state.workflow_history.append({
-                    "request": user_input,
-                    "code": modified_d3_code
-                })
-                st.session_state.current_viz = modified_d3_code
-                st.empty()  # Clear the previous visualization
-                display_visualization(st.session_state.current_viz)
+            user_input = st.text_input("Enter your modification request:")
+            if st.button("Update Visualization"):
+                if user_input:
+                    modified_d3_code = generate_d3_code(st.session_state.preprocessed_df, api_key, user_input)
+                    st.session_state.current_viz = modified_d3_code
+                    st.session_state.workflow_history.append({
+                        "request": user_input,
+                        "code": modified_d3_code
+                    })
+                    viz_placeholder.empty()
+                    viz_placeholder.write(display_visualization(st.session_state.current_viz))
+                    st.success("Visualization updated successfully!")
+                else:
+                    st.warning("Please enter a modification request.")
 
             with st.expander("View/Edit Visualization Code"):
                 code_editor = st.text_area("D3.js Code", value=st.session_state.current_viz, height=300, key="code_editor")
