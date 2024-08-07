@@ -130,6 +130,8 @@ def generate_d3_code(df, api_key):
     9. Create the chart within the 'visualization' div.
     10. Set the width to 100% of the container and height to 500px.
     11. Add margin to the chart for labels and axes.
+    12. Ensure all necessary data processing is done within the D3.js code.
+    13. Include error handling to gracefully handle missing or invalid data.
     
     Please provide the complete D3.js code that can be directly used in a Streamlit component.
     """
