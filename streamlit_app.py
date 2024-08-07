@@ -255,6 +255,7 @@ def main():
             if 'current_viz' not in st.session_state:
                 initial_d3_code = generate_d3_code(preprocessed_df, api_key)
                 st.session_state.current_viz = initial_d3_code
+                st.session_state.workflow_history = []
 
             st.subheader("Current Visualization")
             display_visualization(st.session_state.current_viz)
@@ -263,6 +264,10 @@ def main():
             user_input = st.text_input("Enter your modification request:")
             if st.button("Send Request"):
                 modified_d3_code = generate_d3_code(preprocessed_df, api_key, user_input)
+                st.session_state.workflow_history.append({
+                    "request": user_input,
+                    "code": modified_d3_code
+                })
                 st.session_state.current_viz = modified_d3_code
                 st.experimental_rerun()
 
@@ -275,6 +280,10 @@ def main():
                     if st.button("Execute Code"):
                         if edit_enabled:
                             st.session_state.current_viz = code_editor
+                            st.session_state.workflow_history.append({
+                                "request": "Manual code edit",
+                                "code": code_editor
+                            })
                             st.experimental_rerun()
                         else:
                             st.warning("Enable 'Edit' to make changes.")
@@ -283,6 +292,14 @@ def main():
                         st.write("Code copied to clipboard!")
                         st.write(f'<textarea style="position: absolute; left: -9999px;">{code_editor}</textarea>', unsafe_allow_html=True)
                         st.write('<script>document.querySelector("textarea").select();document.execCommand("copy");</script>', unsafe_allow_html=True)
+
+            with st.expander("Workflow History"):
+                for i, step in enumerate(st.session_state.workflow_history):
+                    st.subheader(f"Step {i+1}")
+                    st.write(f"Request: {step['request']}")
+                    if st.button(f"Revert to Step {i+1}"):
+                        st.session_state.current_viz = step['code']
+                        st.experimental_rerun()
 
         except Exception as e:
             st.error(f"An error occurred while processing the CSV files: {str(e)}")
