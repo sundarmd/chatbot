@@ -3,18 +3,24 @@ import pandas as pd
 from openai import OpenAI
 import os
 import json
-import re
+import logging
 import traceback
+from typing import Dict, List, Optional
 
-# Try to import dotenv, but don't fail if it's not installed
-try:
-    from dotenv import load_dotenv
-    load_dotenv()
-except ImportError:
-    pass
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-def get_api_key():
-    """Retrieve the API key from various possible sources."""
+# Initialize session state
+if 'workflow_history' not in st.session_state:
+    st.session_state.workflow_history = []
+if 'current_viz' not in st.session_state:
+    st.session_state.current_viz = None
+if 'preprocessed_df' not in st.session_state:
+    st.session_state.preprocessed_df = None
+
+def get_api_key() -> Optional[str]:
+    """Securely retrieve the API key."""
     api_key = st.secrets.get("OPENAI_API_KEY") or os.getenv("OPENAI_API_KEY")
     if not api_key:
         api_key = st.sidebar.text_input("Enter your OpenAI API Key", type="password")
@@ -22,43 +28,43 @@ def get_api_key():
             st.sidebar.warning("It's recommended to use environment variables or Streamlit secrets for API keys.")
     return api_key
 
-def preprocess_data(df):
+def test_api_key(api_key: str) -> bool:
+    """Test if the provided API key is valid."""
+    client = OpenAI(api_key=api_key)
+    try:
+        client.models.list()
+        return True
+    except Exception as e:
+        logger.error(f"API key validation failed: {str(e)}")
+        return False
+
+def preprocess_data(df: pd.DataFrame) -> pd.DataFrame:
     """Preprocess the data to a standard format."""
-    # Handle missing values
-    df = df.fillna(0)
-    
-    # Ensure consistent data types
-    for col in df.columns:
-        if df[col].dtype == 'object':
-            try:
-                df[col] = pd.to_numeric(df[col])
-            except ValueError:
-                pass  # Keep as string if can't convert to numeric
-    
-    # Standardize column names
-    df.columns = df.columns.str.lower().str.replace(' ', '_')
-    
-    return df
+    logger.info("Starting data preprocessing")
+    try:
+        # Handle missing values
+        df = df.fillna(0)
+        
+        # Ensure consistent data types
+        for col in df.columns:
+            if df[col].dtype == 'object':
+                try:
+                    df[col] = pd.to_numeric(df[col])
+                except ValueError:
+                    pass  # Keep as string if can't convert to numeric
+        
+        # Standardize column names
+        df.columns = df.columns.str.lower().str.replace(' ', '_')
+        
+        logger.info("Data preprocessing completed successfully")
+        return df
+    except Exception as e:
+        logger.error(f"Error in data preprocessing: {str(e)}")
+        raise
 
-def postprocess_d3_code(code):
-    """Post-process the generated D3.js code to catch common issues."""
-    # Ensure proper function closure
-    if "function updateChart(data) {" in code and code.count("}") < code.count("{"):
-        code += "\n}"
-    
-    # Replace unsupported d3.event with d3.pointer
-    code = code.replace("d3.event", "d3.pointer(event)")
-    
-    # Ensure color scale is defined
-    if "color(" in code and "const color = " not in code:
-        code = "const color = d3.scaleOrdinal(d3.schemeCategory10);\n" + code
-    
-    # Add error handling
-    code = "try {\n" + code + "\n} catch (error) { console.error('Error in D3 code:', error); }"
-    
-    return code
-
-def generate_d3_code(df, api_key, user_input=""):
+def generate_d3_code(df: pd.DataFrame, api_key: str, user_input: str = "") -> Optional[str]:
+    """Generate D3.js code using OpenAI API."""
+    logger.info("Starting D3 code generation")
     data_sample = df.head(50).to_dict(orient='records')
     schema = df.dtypes.to_dict()
     schema_str = "\n".join([f"{col}: {dtype}" for col, dtype in schema.items()])
@@ -88,10 +94,7 @@ def generate_d3_code(df, api_key, user_input=""):
     Return only the D3.js code without any explanations.
     """
     
-    if user_input:
-        prompt = f"{base_prompt}\n\nAdditional user request: {user_input}"
-    else:
-        prompt = base_prompt
+    prompt = f"{base_prompt}\n\nAdditional user request: {user_input}" if user_input else base_prompt
 
     try:
         response = client.chat.completions.create(
@@ -108,11 +111,30 @@ def generate_d3_code(df, api_key, user_input=""):
         
         return postprocess_d3_code(d3_code)
     except Exception as e:
-        st.error(f"Error generating D3 code: {str(e)}")
-        st.write("API Response:", response)  # Log the full API response
+        logger.error(f"Error generating D3 code: {str(e)}")
+        logger.info("API Response:", response)  # Log the full API response
         return None
 
-def display_visualization(d3_code):
+def postprocess_d3_code(code: str) -> str:
+    """Post-process the generated D3.js code to catch common issues."""
+    # Ensure proper function closure
+    if "function updateChart(data) {" in code and code.count("}") < code.count("{"):
+        code += "\n}"
+    
+    # Replace unsupported d3.event with d3.pointer
+    code = code.replace("d3.event", "d3.pointer(event)")
+    
+    # Ensure color scale is defined
+    if "color(" in code and "const color = " not in code:
+        code = "const color = d3.scaleOrdinal(d3.schemeCategory10);\n" + code
+    
+    # Add error handling
+    code = "try {\n" + code + "\n} catch (error) { console.error('Error in D3 code:', error); }"
+    
+    return code
+
+def display_visualization(d3_code: str) -> str:
+    """Generate the HTML content for displaying the D3.js visualization."""
     html_content = f"""
     <div id="visualization"></div>
     <script src="https://d3js.org/d3.v7.min.js"></script>
@@ -138,14 +160,6 @@ def display_visualization(d3_code):
 def main():
     st.set_page_config(page_title="ChartChat", layout="wide")
     st.title("ChartChat")
-
-    # Initialize session state
-    if 'workflow_history' not in st.session_state:
-        st.session_state.workflow_history = []
-    if 'current_viz' not in st.session_state:
-        st.session_state.current_viz = None
-    if 'preprocessed_df' not in st.session_state:
-        st.session_state.preprocessed_df = None
 
     api_key = get_api_key()
 
@@ -176,12 +190,17 @@ def main():
             if 'current_viz' not in st.session_state:
                 try:
                     initial_d3_code = generate_d3_code(st.session_state.preprocessed_df, api_key)
-                    st.session_state.current_viz = initial_d3_code
-                    st.session_state.workflow_history.append({
-                        "request": "Initial visualization",
-                        "code": initial_d3_code
-                    })
+                    if initial_d3_code:
+                        st.session_state.current_viz = initial_d3_code
+                        st.session_state.workflow_history.append({
+                            "request": "Initial visualization",
+                            "code": initial_d3_code
+                        })
+                    else:
+                        st.error("Failed to generate initial visualization. Please check the error messages above.")
+                        st.session_state.current_viz = None
                 except Exception as e:
+                    logger.error(f"Error generating initial visualization: {str(e)}")
                     st.error(f"Error generating initial visualization: {str(e)}")
                     st.code(traceback.format_exc())
                     st.session_state.current_viz = None
@@ -191,21 +210,24 @@ def main():
             if st.session_state.current_viz:
                 viz_placeholder.write(display_visualization(st.session_state.current_viz))
             else:
-                viz_placeholder.error("No visualization available. Check the error message above.")
+                viz_placeholder.error("No visualization available. Check the error messages above.")
 
             st.subheader("Modify Visualization")
             user_input = st.text_input("Enter your modification request:")
             if st.button("Update Visualization"):
                 if user_input:
                     modified_d3_code = generate_d3_code(st.session_state.preprocessed_df, api_key, user_input)
-                    st.session_state.current_viz = modified_d3_code
-                    st.session_state.workflow_history.append({
-                        "request": user_input,
-                        "code": modified_d3_code
-                    })
-                    viz_placeholder.empty()
-                    viz_placeholder.write(display_visualization(st.session_state.current_viz))
-                    st.success("Visualization updated successfully!")
+                    if modified_d3_code:
+                        st.session_state.current_viz = modified_d3_code
+                        st.session_state.workflow_history.append({
+                            "request": user_input,
+                            "code": modified_d3_code
+                        })
+                        viz_placeholder.empty()
+                        viz_placeholder.write(display_visualization(st.session_state.current_viz))
+                        st.success("Visualization updated successfully!")
+                    else:
+                        st.error("Failed to generate modified visualization. Please check the error messages above.")
                 else:
                     st.warning("Please enter a modification request.")
 
@@ -242,6 +264,7 @@ def main():
                         display_visualization(st.session_state.current_viz)
 
         except Exception as e:
+            logger.error(f"An error occurred while processing the CSV files: {str(e)}")
             st.error(f"An error occurred while processing the CSV files: {str(e)}")
             st.code(traceback.format_exc())
     else:
