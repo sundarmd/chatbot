@@ -4,6 +4,7 @@ from openai import OpenAI
 import os
 import json
 import re
+import traceback
 
 # Try to import dotenv, but don't fail if it's not installed
 try:
@@ -58,71 +59,50 @@ def postprocess_d3_code(code):
     return code
 
 def generate_d3_code(df, api_key, user_input=""):
-    columns = df.columns.tolist()[:2]
-    data_sample = df.to_dict(orient='records')
+    data_sample = df.head(50).to_dict(orient='records')
+    schema = df.dtypes.to_dict()
+    schema_str = "\n".join([f"{col}: {dtype}" for col, dtype in schema.items()])
     
-    if user_input:
-        client = OpenAI(api_key=api_key)
-        prompt = f"Modify the following D3.js code according to this request: {user_input}\n\nExisting code:\n{st.session_state.current_viz}"
-        response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": "You are a D3.js expert. Modify the given code according to the user's request. Return only the modified D3.js code."},
-                {"role": "user", "content": prompt}
-            ]
-        )
-        modified_code = response.choices[0].message.content
-        return postprocess_d3_code(modified_code)
+    client = OpenAI(api_key=api_key)
     
-    # If no user input, generate initial code
-    d3_code = f"""
-    // Set the dimensions and margins of the graph
-    const margin = {{top: 30, right: 30, bottom: 70, left: 60}},
-        width = 800 - margin.left - margin.right,
-        height = 500 - margin.top - margin.bottom;
+    base_prompt = f"""
+    Create a D3.js visualization based on the following data schema:
 
-    // Append the svg object to the div
-    const svg = d3.select("#visualization")
-      .append("svg")
-        .attr("width", width + margin.left + margin.right)
-        .attr("height", height + margin.top + margin.bottom)
-      .append("g")
-        .attr("transform", `translate(${{margin.left}},${{margin.top}})`);
+    {schema_str}
 
-    // Parse the Data
-    const data = {json.dumps(data_sample)};
+    Data sample:
+    {json.dumps(data_sample[:5], indent=2)}
 
-    // X axis
-    const x = d3.scaleBand()
-      .range([ 0, width ])
-      .domain(data.map(d => d.{columns[0]}))
-      .padding(0.2);
-    svg.append("g")
-      .attr("transform", `translate(0, ${{height}})`)
-      .call(d3.axisBottom(x))
-      .selectAll("text")
-        .attr("transform", "translate(-10,0)rotate(-45)")
-        .style("text-anchor", "end");
+    Requirements:
+    1. Create an appropriate chart type based on the data.
+    2. Include grid lines for better readability.
+    3. Add clear and informative labels for axes and the chart title.
+    4. Include a legend if multiple data series are present.
+    5. Use appropriate scales for the data.
+    6. Implement basic interactivity (e.g., tooltips on hover).
+    7. Ensure the chart is responsive and fits within an 800x500 pixel area.
+    8. Use a pleasing color scheme.
+    9. Handle potential null or undefined values gracefully.
+    10. Include appropriate data transformations if necessary.
 
-    // Add Y axis
-    const y = d3.scaleLinear()
-      .domain([0, d3.max(data, d => +d.{columns[1]})])
-      .range([ height, 0]);
-    svg.append("g")
-      .call(d3.axisLeft(y));
-
-    // Bars
-    svg.selectAll("mybar")
-      .data(data)
-      .join("rect")
-        .attr("x", d => x(d.{columns[0]}))
-        .attr("y", d => y(d.{columns[1]}))
-        .attr("width", x.bandwidth())
-        .attr("height", d => height - y(d.{columns[1]}))
-        .attr("fill", "#69b3a2");
+    Return only the D3.js code without any explanations.
     """
     
-    return d3_code
+    if user_input:
+        prompt = f"{base_prompt}\n\nAdditional user request: {user_input}"
+    else:
+        prompt = base_prompt
+
+    response = client.chat.completions.create(
+        model="gpt-3.5-turbo",
+        messages=[
+            {"role": "system", "content": "You are a D3.js expert. Generate D3.js code based on the given requirements."},
+            {"role": "user", "content": prompt}
+        ]
+    )
+    
+    d3_code = response.choices[0].message.content
+    return postprocess_d3_code(d3_code)
 
 def display_visualization(d3_code):
     html_content = f"""
@@ -145,11 +125,7 @@ def display_visualization(d3_code):
     }}
     </script>
     """
-    st.components.v1.html(html_content, height=520, scrolling=False)
-
-    # Display the generated code for debugging
-    with st.expander("View Generated D3 Code"):
-        st.code(d3_code, language="javascript")
+    return html_content
 
 def main():
     st.set_page_config(page_title="ChartChat", layout="wide")
@@ -190,16 +166,24 @@ def main():
                 st.dataframe(st.session_state.preprocessed_df.head())
             
             if 'current_viz' not in st.session_state:
-                initial_d3_code = generate_d3_code(st.session_state.preprocessed_df, api_key)
-                st.session_state.current_viz = initial_d3_code
-                st.session_state.workflow_history.append({
-                    "request": "Initial visualization",
-                    "code": initial_d3_code
-                })
+                try:
+                    initial_d3_code = generate_d3_code(st.session_state.preprocessed_df, api_key)
+                    st.session_state.current_viz = initial_d3_code
+                    st.session_state.workflow_history.append({
+                        "request": "Initial visualization",
+                        "code": initial_d3_code
+                    })
+                except Exception as e:
+                    st.error(f"Error generating initial visualization: {str(e)}")
+                    st.code(traceback.format_exc())
+                    st.session_state.current_viz = None
 
             st.subheader("Current Visualization")
             viz_placeholder = st.empty()
-            viz_placeholder.write(display_visualization(st.session_state.current_viz))
+            if st.session_state.current_viz:
+                viz_placeholder.write(display_visualization(st.session_state.current_viz))
+            else:
+                viz_placeholder.error("No visualization available. Check the error message above.")
 
             st.subheader("Modify Visualization")
             user_input = st.text_input("Enter your modification request:")
@@ -251,6 +235,7 @@ def main():
 
         except Exception as e:
             st.error(f"An error occurred while processing the CSV files: {str(e)}")
+            st.code(traceback.format_exc())
     else:
         st.info("Please upload both CSV files and provide an API key to visualize your data")
 
