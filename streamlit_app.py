@@ -58,180 +58,85 @@ def postprocess_d3_code(code):
     return code
 
 def generate_d3_code(df, api_key, user_input=""):
-    # Prepare data summary
-    columns = df.columns.tolist()
-    data_types = df.dtypes.to_dict()
+    # Create a simple bar chart using the first two columns of the data
+    columns = df.columns.tolist()[:2]
     data_sample = df.head(5).to_dict(orient='records')
-    data_summary = {
-        "columns": columns,
-        "data_types": {str(k): str(v) for k, v in data_types.items()},
-        "sample_data": data_sample
-    }
+    
+    d3_code = f"""
+    // Set the dimensions and margins of the graph
+    const margin = {{top: 30, right: 30, bottom: 70, left: 60}},
+        width = 460 - margin.left - margin.right,
+        height = 400 - margin.top - margin.bottom;
 
-    scaffold_code = """
-    // D3.js Visualization Scaffold
-    const margin = {top: 60, right: 120, bottom: 80, left: 80};
-    const width = 800 - margin.left - margin.right;
-    const height = 500 - margin.top - margin.bottom;
-
-    d3.select("#visualization").selectAll("*").remove();
-
+    // Append the svg object to the div
     const svg = d3.select("#visualization")
-        .append("svg")
+      .append("svg")
         .attr("width", width + margin.left + margin.right)
         .attr("height", height + margin.top + margin.bottom)
-        .append("g")
-        .attr("transform", `translate(${margin.left},${margin.top})`);
+      .append("g")
+        .attr("transform", `translate(${{margin.left}},${{margin.top}})`);
 
-    // Set up scales (example)
-    const x = d3.scaleLinear().range([0, width]);
-    const y = d3.scaleLinear().range([height, 0]);
+    // Parse the Data
+    const data = {json.dumps(data_sample)};
 
-    // Set up axes (example)
-    const xAxis = svg.append("g")
-        .attr("transform", `translate(0,${height})`)
-        .attr("class", "axis");
-    const yAxis = svg.append("g")
-        .attr("class", "axis");
+    // X axis
+    const x = d3.scaleBand()
+      .range([ 0, width ])
+      .domain(data.map(d => d.{columns[0]}))
+      .padding(0.2);
+    svg.append("g")
+      .attr("transform", `translate(0, ${{height}})`)
+      .call(d3.axisBottom(x))
+      .selectAll("text")
+        .attr("transform", "translate(-10,0)rotate(-45)")
+        .style("text-anchor", "end");
 
-    // Add title
-    svg.append("text")
-        .attr("x", width / 2)
-        .attr("y", -margin.top / 2)
-        .attr("text-anchor", "middle")
-        .attr("class", "chart-title")
-        .text("Chart Title");
+    // Add Y axis
+    const y = d3.scaleLinear()
+      .domain([0, d3.max(data, d => +d.{columns[1]})])
+      .range([ height, 0]);
+    svg.append("g")
+      .call(d3.axisLeft(y));
 
-    // Add x-axis label
-    svg.append("text")
-        .attr("x", width / 2)
-        .attr("y", height + margin.bottom / 2)
-        .attr("text-anchor", "middle")
-        .attr("class", "axis-label")
-        .text("X Axis Label");
-
-    // Add y-axis label
-    svg.append("text")
-        .attr("transform", "rotate(-90)")
-        .attr("x", -height / 2)
-        .attr("y", -margin.left / 2)
-        .attr("text-anchor", "middle")
-        .attr("class", "axis-label")
-        .text("Y Axis Label");
-
-    function updateChart(data) {
-        // Your visualization code here
-    }
-
-    // Load data and call updateChart
-    const data = ${json.dumps(data_sample)};
-    updateChart(data);
-
-    // Add styles
-    const styles = `
-        #visualization {
-            font-family: Arial, sans-serif;
-            background-color: #1e1e1e;
-            color: #ffffff;
-        }
-        .axis path,
-        .axis line {
-            stroke: #4f4f4f;
-        }
-        .axis text {
-            fill: #ffffff;
-            font-size: 12px;
-        }
-        .chart-title {
-            font-size: 20px;
-            fill: #ffffff;
-        }
-        .axis-label {
-            font-size: 14px;
-            fill: #ffffff;
-        }
-    `;
-    const styleElement = document.createElement('style');
-    styleElement.textContent = styles;
-    document.head.appendChild(styleElement);
+    // Bars
+    svg.selectAll("mybar")
+      .data(data)
+      .join("rect")
+        .attr("x", d => x(d.{columns[0]}))
+        .attr("y", d => y(d.{columns[1]}))
+        .attr("width", x.bandwidth())
+        .attr("height", d => height - y(d.{columns[1]}))
+        .attr("fill", "#69b3a2");
     """
-
-    client = OpenAI(api_key=api_key)
-    prompt = f"""
-    Given the following data summary, create a D3.js visualization that best represents the data:
-
-    Data Summary:
-    {json.dumps(data_summary, indent=2)}
-
-    Scaffold Code:
-    {scaffold_code}
-
-    User Request: {user_input}
-
-    Please complete the updateChart function to create an appropriate visualization for this data.
-    Ensure the visualization is optimized for a dark background and includes interactive elements like tooltips.
-    Use only the variables defined in the scaffold (svg, x, y, xAxis, yAxis).
-    If there's a user request, try to incorporate it into the visualization.
     
-    Follow these style and design requirements:
-    1. Clean, minimalist design with a dark background
-    2. Clear, legible labeling with light text
-    3. Light gray gridlines
-    4. Distinct color scheme for data categories, suitable for dark backgrounds
-    5. Responsive design
-    6. Large, readable font sizes
-    7. Clear title and axis labels
-    8. Legend outside the main plot area (if applicable)
-    9. Reduced visual clutter
-    10. Smooth transitions for interactivity
-    11. Tooltips or interactive elements for detailed information
-    12. Accessibility with ARIA attributes
-    """
-
-    try:
-        response = client.chat.completions.create(
-            model="gpt-4",
-            messages=[
-                {"role": "system", "content": "You are a D3.js expert. Generate only the code for the updateChart function without explanations."},
-                {"role": "user", "content": prompt}
-            ],
-            max_tokens=2500,
-            n=1,
-            temperature=0.7,
-        )
-        generated_code = response.choices[0].message.content.strip()
-        
-        # Post-process the generated code
-        processed_code = postprocess_d3_code(generated_code)
-        
-        # Insert the processed code into the scaffold
-        complete_code = scaffold_code.replace("// Your visualization code here", processed_code)
-        
-        return complete_code
-    except Exception as e:
-        st.error(f"An error occurred while generating the D3.js code: {str(e)}")
-        return scaffold_code  # Return the scaffold code as a fallback
+    return d3_code
 
 def display_visualization(d3_code):
-    # Debug: Print the generated D3 code
-    st.text("Generated D3 Code:")
-    st.code(d3_code, language="javascript")
-
     html_content = f"""
+    <div id="visualization"></div>
     <script src="https://d3js.org/d3.v7.min.js"></script>
-    <div id="visualization" style="width:100%; height:500px;"></div>
     <script>
-    (function() {{
+    function runD3Code() {{
         try {{
             {d3_code}
         }} catch (error) {{
             console.error('Error in D3 code:', error);
             document.getElementById('visualization').innerHTML = '<p style="color: red;">Error generating visualization. Check console for details.</p>';
         }}
-    }})();
+    }}
+    
+    if (document.readyState === 'complete') {{
+        runD3Code();
+    }} else {{
+        document.addEventListener('DOMContentLoaded', runD3Code);
+    }}
     </script>
     """
     st.components.v1.html(html_content, height=520, scrolling=False)
+
+    # Display the generated code for debugging
+    with st.expander("View Generated D3 Code"):
+        st.code(d3_code, language="javascript")
 
 def main():
     st.set_page_config(page_title="ChartChat", layout="wide")
@@ -273,6 +178,8 @@ def main():
                     "request": "Initial visualization",
                     "code": initial_d3_code
                 })
+                # Debug print
+                st.write("Debug: D3 code generated successfully")
 
             st.subheader("Current Visualization")
             display_visualization(st.session_state.current_viz)
