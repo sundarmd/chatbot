@@ -181,7 +181,7 @@ def display_visualization(d3_code):
         <script src='https://d3js.org/d3.v7.min.js'></script>
         <div id='visualization'></div>
         <script>{d3_code}</script>
-    """, height=600, scrolling=True, sandbox="allow-scripts")
+    """, height=600, scrolling=True)
 
 if __name__ == "__main__":
     main()
