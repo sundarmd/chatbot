@@ -193,10 +193,7 @@ def main():
                     "code": modified_d3_code
                 })
                 st.session_state.current_viz = modified_d3_code
-                
-                # Update the visualization immediately
-                st.subheader("Updated Visualization")
-                display_visualization(st.session_state.current_viz)
+                st.experimental_rerun()  # This will rerun the script and update the visualization
 
             with st.expander("View/Edit Visualization Code"):
                 code_editor = st.text_area("D3.js Code", value=st.session_state.current_viz, height=300, key="code_editor")
@@ -211,9 +208,7 @@ def main():
                                 "request": "Manual code edit",
                                 "code": code_editor
                             })
-                            # Update the visualization immediately
-                            st.subheader("Updated Visualization")
-                            display_visualization(st.session_state.current_viz)
+                            st.experimental_rerun()  # This will rerun the script and update the visualization
                         else:
                             st.warning("Enable 'Edit' to make changes.")
                 with col3:
@@ -228,9 +223,7 @@ def main():
                     st.write(f"Request: {step['request']}")
                     if st.button(f"Revert to Step {i+1}"):
                         st.session_state.current_viz = step['code']
-                        # Update the visualization immediately
-                        st.subheader("Reverted Visualization")
-                        display_visualization(st.session_state.current_viz)
+                        st.experimental_rerun()  # This will rerun the script and update the visualization
 
         except Exception as e:
             st.error(f"An error occurred while processing the CSV files: {str(e)}")
