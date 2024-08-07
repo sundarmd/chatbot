@@ -126,6 +126,10 @@ def generate_d3_code(df, api_key):
     5. Use appropriate scales based on the data types.
     6. Include a legend to distinguish between different data sources or categories.
     7. Ensure the code is bug-free and handles potential errors gracefully.
+    8. Use D3.js version 7 (d3.v7.min.js).
+    9. Create the chart within the 'visualization' div.
+    10. Set the width to 100% of the container and height to 500px.
+    11. Add margin to the chart for labels and axes.
     
     Please provide the complete D3.js code that can be directly used in a Streamlit component.
     """
@@ -158,6 +162,7 @@ def modify_visualization(df, api_key, user_input, current_code):
     {current_code}
 
     Please provide the modified D3.js code that incorporates the user's request while maintaining the existing functionality.
+    Ensure the code uses D3.js version 7 and creates the chart within the 'visualization' div.
     """
 
     try:
@@ -178,10 +183,14 @@ def modify_visualization(df, api_key, user_input, current_code):
 
 def display_visualization(d3_code):
     st.components.v1.html(f"""
-        <script src='https://d3js.org/d3.v7.min.js'></script>
-        <div id='visualization'></div>
-        <script>{d3_code}</script>
-    """, height=600, scrolling=True)
+        <script src="https://d3js.org/d3.v7.min.js"></script>
+        <div id="visualization" style="width:100%; height:500px;"></div>
+        <script>
+        (function() {{
+            {d3_code}
+        }})();
+        </script>
+    """, height=550, scrolling=True)
 
 if __name__ == "__main__":
     main()
