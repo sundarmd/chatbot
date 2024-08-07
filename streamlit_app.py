@@ -213,19 +213,24 @@ def generate_d3_code(df, api_key, user_input=""):
         return scaffold_code  # Return the scaffold code as a fallback
 
 def display_visualization(d3_code):
-    st.components.v1.html(f"""
-        <script src="https://d3js.org/d3.v7.min.js"></script>
-        <div id="visualization" style="width:100%; height:500px;"></div>
-        <script>
-        (function() {{
-            {d3_code}
-        }})();
-        </script>
-    """, height=520, scrolling=False)
+    html_content = f"""
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <div id="visualization" style="width:100%; height:500px;"></div>
+    <script>
+    (function() {{
+        {d3_code}
+    }})();
+    </script>
+    """
+    st.components.v1.html(html_content, height=520, scrolling=False)
 
 def main():
     st.set_page_config(page_title="ChartChat", layout="wide")
     st.title("ChartChat")
+
+    # Initialize session state for workflow history if it doesn't exist
+    if 'workflow_history' not in st.session_state:
+        st.session_state.workflow_history = []
 
     api_key = get_api_key()
 
@@ -255,7 +260,10 @@ def main():
             if 'current_viz' not in st.session_state:
                 initial_d3_code = generate_d3_code(preprocessed_df, api_key)
                 st.session_state.current_viz = initial_d3_code
-                st.session_state.workflow_history = []
+                st.session_state.workflow_history.append({
+                    "request": "Initial visualization",
+                    "code": initial_d3_code
+                })
 
             st.subheader("Current Visualization")
             display_visualization(st.session_state.current_viz)
