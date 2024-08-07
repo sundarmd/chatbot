@@ -220,13 +220,10 @@ def generate_d3_code(df, api_key):
 
     client = OpenAI(api_key=api_key)
     prompt = f"""
-    Given the following data summary and D3.js scaffold, create a visualization that best represents the data:
+    Given the following data summary, create a D3.js visualization that best represents the data:
 
     Data Summary:
     {json.dumps(data_summary, indent=2)}
-
-    D3.js Scaffold:
-    {scaffold_code}
 
     Please complete the updateChart function to create an appropriate visualization for this data.
     Ensure the visualization is optimized for a dark background and includes interactive elements like tooltips.
@@ -245,6 +242,9 @@ def generate_d3_code(df, api_key):
             temperature=0.7,
         )
         generated_code = response.choices[0].message.content.strip()
+        
+        # Remove any function declaration and closing bracket from the generated code
+        generated_code = generated_code.replace("function updateChart(data) {", "").replace("}", "").strip()
         
         # Insert the generated code into the scaffold
         complete_code = scaffold_code.replace("// Generated code will be inserted here", generated_code)
