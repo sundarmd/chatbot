@@ -112,38 +112,47 @@ def generate_d3_code(df, api_key):
     data_sample = df.head(5).to_dict(orient='records')
     
     prompt = f"""
-    Generate a D3.js line chart code for the following dataset:
+    Generate D3.js code for an interactive visualization based on the following dataset:
     
     Columns: {columns}
     Data types: {data_types}
     Sample data: {json.dumps(data_sample)}
     
-    Requirements:
-    1. Create a line chart comparing data from both CSV files.
-    2. Use distinct and meaningful color coding for different lines.
-    3. Add appropriate labels for axes and legend.
-    4. Make the chart responsive and fit well within a Streamlit app.
-    5. Use appropriate scales based on the data types.
-    6. Include a legend to distinguish between different data sources or categories.
-    7. Ensure the code is bug-free and handles potential errors gracefully.
-    8. Use D3.js version 7 (d3.v7.min.js).
-    9. Create the chart within the 'visualization' div.
-    10. Set the width to 100% of the container and height to 500px.
-    11. Add margin to the chart for labels and axes.
-    12. Ensure all necessary data processing is done within the D3.js code.
-    13. Include error handling to gracefully handle missing or invalid data.
-    
+    Style and design requirements:
+    1. Use a clean, minimalist design with a white background.
+    2. Implement clear, legible labeling for all chart elements.
+    3. Include light gray gridlines to aid in reading values.
+    4. Use a distinct color scheme to differentiate between data categories or series.
+    5. Ensure the visualization is responsive and fits well within a Streamlit app.
+    6. Use larger font sizes for better readability.
+    7. Include a title and axis labels that clearly describe the data being visualized.
+    8. If applicable, place a legend outside the main plot area for clarity.
+    9. Remove unnecessary chart borders or elements to reduce visual clutter.
+    10. Implement smooth transitions for any interactive features or updates.
+    11. Add tooltips or interactive elements to display detailed information on user interaction.
+    12. Ensure the visualization is accessible with proper ARIA attributes.
+
+    Technical requirements:
+    1. Use D3.js version 7 for compatibility.
+    2. Create the visualization within a div with the id 'visualization'.
+    3. Include all necessary data processing within the D3.js code.
+    4. Ensure the code can handle the given dataset structure and types.
+    5. Implement appropriate scales and axes based on the data characteristics.
+    6. Set the width to 100% of the container and height to 500px.
+    7. Add margin to the chart for labels and axes.
+    8. Ensure the code is bug-free and handles potential errors gracefully.
+
     Please provide the complete D3.js code that can be directly used in a Streamlit component.
     """
 
     try:
         response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
+            model="gpt-4",
             messages=[
                 {"role": "system", "content": "You are a D3.js expert. Generate only the code without any explanations."},
                 {"role": "user", "content": prompt}
             ],
-            max_tokens=1500,
+            max_tokens=2500,
             n=1,
             temperature=0.7,
         )
@@ -165,16 +174,29 @@ def modify_visualization(df, api_key, user_input, current_code):
 
     Please provide the modified D3.js code that incorporates the user's request while maintaining the existing functionality.
     Ensure the code uses D3.js version 7 and creates the chart within the 'visualization' div.
+    Maintain the style and design requirements from the original visualization:
+    1. Clean, minimalist design with a white background
+    2. Clear, legible labeling
+    3. Light gray gridlines
+    4. Distinct color scheme for data categories
+    5. Responsive design
+    6. Large, readable font sizes
+    7. Clear title and axis labels
+    8. Legend outside the main plot area (if applicable)
+    9. Reduced visual clutter
+    10. Smooth transitions for interactivity
+    11. Tooltips or interactive elements for detailed information
+    12. Accessibility with ARIA attributes
     """
 
     try:
         response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
+            model="gpt-4",
             messages=[
                 {"role": "system", "content": "You are a D3.js expert. Modify the given code based on the user's request."},
                 {"role": "user", "content": prompt}
             ],
-            max_tokens=1500,
+            max_tokens=2500,
             n=1,
             temperature=0.7,
         )
