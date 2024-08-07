@@ -58,15 +58,14 @@ def postprocess_d3_code(code):
     return code
 
 def generate_d3_code(df, api_key, user_input=""):
-    # Create a simple bar chart using the first two columns of the data
     columns = df.columns.tolist()[:2]
-    data_sample = df.head(5).to_dict(orient='records')
+    data_sample = df.to_dict(orient='records')  # Use all data instead of just head(5)
     
     d3_code = f"""
     // Set the dimensions and margins of the graph
     const margin = {{top: 30, right: 30, bottom: 70, left: 60}},
-        width = 460 - margin.left - margin.right,
-        height = 400 - margin.top - margin.bottom;
+        width = 800 - margin.left - margin.right,
+        height = 500 - margin.top - margin.bottom;
 
     // Append the svg object to the div
     const svg = d3.select("#visualization")
@@ -185,8 +184,9 @@ def main():
             display_visualization(st.session_state.current_viz)
 
             st.subheader("Modify Visualization")
-            user_input = st.text_input("Enter your modification request:")
-            if st.button("Send Request"):
+            st.write("Press Enter to submit your request and update the visualization.")
+            user_input = st.text_input("Enter your modification request:", key="user_input")
+            if user_input:  # This will trigger when the user presses Enter
                 modified_d3_code = generate_d3_code(preprocessed_df, api_key, user_input)
                 st.session_state.workflow_history.append({
                     "request": user_input,
