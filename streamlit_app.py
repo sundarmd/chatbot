@@ -139,75 +139,83 @@ def generate_d3_code(df, api_key):
 
     scaffold_code = """
     // D3.js Visualization Scaffold for Dark Background
+    (function() {
+        try {
+            // Clear any existing content
+            d3.select("#visualization").html("");
 
-    // Set up SVG
-    const margin = {top: 40, right: 100, bottom: 60, left: 60};
-    const width = 800 - margin.left - margin.right;
-    const height = 500 - margin.top - margin.bottom;
+            const margin = {top: 40, right: 100, bottom: 60, left: 60};
+            const width = 800 - margin.left - margin.right;
+            const height = 500 - margin.top - margin.bottom;
 
-    const svg = d3.select("#visualization")
-        .append("svg")
-        .attr("width", width + margin.left + margin.right)
-        .attr("height", height + margin.top + margin.bottom)
-        .append("g")
-        .attr("transform", `translate(${margin.left},${margin.top})`);
+            const svg = d3.select("#visualization")
+                .append("svg")
+                .attr("width", width + margin.left + margin.right)
+                .attr("height", height + margin.top + margin.bottom)
+                .append("g")
+                .attr("transform", `translate(${margin.left},${margin.top})`);
 
-    // Set up scales (example for numerical data)
-    const x = d3.scaleLinear().range([0, width]);
-    const y = d3.scaleLinear().range([height, 0]);
+            // Set up scales
+            const x = d3.scaleLinear().range([0, width]);
+            const y = d3.scaleLinear().range([height, 0]);
+            const color = d3.scaleOrdinal(d3.schemeCategory10);
 
-    // Set up color scale
-    const color = d3.scaleOrdinal(d3.schemeCategory10);
+            // Add axes
+            const xAxis = svg.append("g")
+                .attr("transform", `translate(0,${height})`)
+                .attr("class", "axis");
 
-    // Add axes
-    const xAxis = svg.append("g")
-        .attr("transform", `translate(0,${height})`)
-        .attr("class", "axis");
+            const yAxis = svg.append("g")
+                .attr("class", "axis");
 
-    const yAxis = svg.append("g")
-        .attr("class", "axis");
+            // Add gridlines
+            svg.append("g")
+                .attr("class", "grid")
+                .attr("transform", `translate(0,${height})`)
+                .call(d3.axisBottom(x).tickSize(-height).tickFormat(""));
 
-    // Add gridlines
-    svg.append("g")
-        .attr("class", "grid")
-        .attr("transform", `translate(0,${height})`)
-        .call(d3.axisBottom(x).tickSize(-height).tickFormat(""));
+            svg.append("g")
+                .attr("class", "grid")
+                .call(d3.axisLeft(y).tickSize(-width).tickFormat(""));
 
-    svg.append("g")
-        .attr("class", "grid")
-        .call(d3.axisLeft(y).tickSize(-width).tickFormat(""));
+            // Add title
+            svg.append("text")
+                .attr("x", width / 2)
+                .attr("y", -margin.top / 2)
+                .attr("text-anchor", "middle")
+                .style("font-size", "16px")
+                .style("fill", "#ffffff")
+                .text("City Statistics Visualization");
 
-    // Add title
-    svg.append("text")
-        .attr("x", width / 2)
-        .attr("y", -margin.top / 2)
-        .attr("text-anchor", "middle")
-        .style("font-size", "16px")
-        .style("fill", "#ffffff")
-        .text("Visualization Title");
+            // Style for dark background
+            svg.selectAll(".axis path, .axis line, .grid line")
+                .style("stroke", "#cccccc")
+                .style("opacity", 0.2);
 
-    // Style for dark background
-    svg.selectAll(".axis path, .axis line, .grid line")
-        .style("stroke", "#cccccc")
-        .style("opacity", 0.2);
+            svg.selectAll(".axis text")
+                .style("fill", "#ffffff");
 
-    svg.selectAll(".axis text")
-        .style("fill", "#ffffff");
+            // Add legend
+            const legend = svg.append("g")
+                .attr("class", "legend")
+                .attr("transform", `translate(${width + 20}, 0)`);
 
-    // Add legend
-    const legend = svg.append("g")
-        .attr("class", "legend")
-        .attr("transform", `translate(${width + 20}, 0)`);
+            // Load and process data
+            const data = ${json.dumps(data_sample)};
+            console.log("Data:", data);
 
-    // Function to update the chart (to be implemented based on data)
-    function updateChart(data) {
-        // Implementation depends on the specific chart type and data structure
-    }
+            function updateChart(data) {
+                // Generated code will be inserted here
+            }
 
-    // Load and process data
-    // d3.json("data.json").then(function(data) {
-    //     updateChart(data);
-    // });
+            // Call updateChart with the data
+            updateChart(data);
+
+        } catch (error) {
+            console.error("Error in D3.js code:", error);
+            d3.select("#visualization").html("<p style='color: red;'>Error rendering visualization. Check the console for details.</p>");
+        }
+    })();
     """
 
     client = OpenAI(api_key=api_key)
@@ -220,25 +228,31 @@ def generate_d3_code(df, api_key):
     D3.js Scaffold:
     {scaffold_code}
 
-    Please complete the scaffold code to create an appropriate visualization for this data.
+    Please complete the updateChart function to create an appropriate visualization for this data.
     Ensure the visualization is optimized for a dark background and includes interactive elements like tooltips.
+    Use only the variables defined in the scaffold (svg, x, y, color, xAxis, yAxis, legend).
     """
 
     try:
         response = client.chat.completions.create(
             model="gpt-4",
             messages=[
-                {"role": "system", "content": "You are a D3.js expert. Generate only the code without explanations."},
+                {"role": "system", "content": "You are a D3.js expert. Generate only the code for the updateChart function without explanations."},
                 {"role": "user", "content": prompt}
             ],
             max_tokens=2500,
             n=1,
             temperature=0.7,
         )
-        return response.choices[0].message.content.strip()
+        generated_code = response.choices[0].message.content.strip()
+        
+        # Insert the generated code into the scaffold
+        complete_code = scaffold_code.replace("// Generated code will be inserted here", generated_code)
+        
+        return complete_code
     except Exception as e:
         st.error(f"An error occurred while generating the D3.js code: {str(e)}")
-        return ""
+        return scaffold_code  # Return the scaffold code as a fallback
 
 def modify_visualization(df, api_key, user_input, current_code):
     # Prepare data summary
