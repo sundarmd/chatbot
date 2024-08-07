@@ -144,6 +144,8 @@ def main():
     # Initialize session state for workflow history if it doesn't exist
     if 'workflow_history' not in st.session_state:
         st.session_state.workflow_history = []
+    if 'current_viz' not in st.session_state:
+        st.session_state.current_viz = None
 
     api_key = get_api_key()
 
@@ -170,15 +172,13 @@ def main():
             with st.expander("Preview of preprocessed data"):
                 st.dataframe(preprocessed_df.head())
             
-            if 'current_viz' not in st.session_state:
+            if st.session_state.current_viz is None:
                 initial_d3_code = generate_d3_code(preprocessed_df, api_key)
                 st.session_state.current_viz = initial_d3_code
                 st.session_state.workflow_history.append({
                     "request": "Initial visualization",
                     "code": initial_d3_code
                 })
-                # Debug print
-                st.write("Debug: D3 code generated successfully")
 
             st.subheader("Current Visualization")
             display_visualization(st.session_state.current_viz)
@@ -193,7 +193,10 @@ def main():
                     "code": modified_d3_code
                 })
                 st.session_state.current_viz = modified_d3_code
-                st.experimental_rerun()
+                
+                # Update the visualization immediately
+                st.subheader("Updated Visualization")
+                display_visualization(st.session_state.current_viz)
 
             with st.expander("View/Edit Visualization Code"):
                 code_editor = st.text_area("D3.js Code", value=st.session_state.current_viz, height=300, key="code_editor")
@@ -208,7 +211,9 @@ def main():
                                 "request": "Manual code edit",
                                 "code": code_editor
                             })
-                            st.experimental_rerun()
+                            # Update the visualization immediately
+                            st.subheader("Updated Visualization")
+                            display_visualization(st.session_state.current_viz)
                         else:
                             st.warning("Enable 'Edit' to make changes.")
                 with col3:
@@ -223,7 +228,9 @@ def main():
                     st.write(f"Request: {step['request']}")
                     if st.button(f"Revert to Step {i+1}"):
                         st.session_state.current_viz = step['code']
-                        st.experimental_rerun()
+                        # Update the visualization immediately
+                        st.subheader("Reverted Visualization")
+                        display_visualization(st.session_state.current_viz)
 
         except Exception as e:
             st.error(f"An error occurred while processing the CSV files: {str(e)}")
