@@ -156,11 +156,13 @@ def main():
     st.set_page_config(page_title="ChartChat", layout="wide")
     st.title("ChartChat")
 
-    # Initialize session state for workflow history if it doesn't exist
+    # Initialize session state
     if 'workflow_history' not in st.session_state:
         st.session_state.workflow_history = []
     if 'current_viz' not in st.session_state:
         st.session_state.current_viz = None
+    if 'preprocessed_df' not in st.session_state:
+        st.session_state.preprocessed_df = None
 
     api_key = get_api_key()
 
@@ -173,22 +175,23 @@ def main():
 
     if file1 and file2 and api_key:
         try:
-            df1 = pd.read_csv(file1)
-            df2 = pd.read_csv(file2)
+            if st.session_state.preprocessed_df is None:
+                df1 = pd.read_csv(file1)
+                df2 = pd.read_csv(file2)
 
-            df1['Source'] = 'CSV file 1'
-            df2['Source'] = 'CSV file 2'
+                df1['Source'] = 'CSV file 1'
+                df2['Source'] = 'CSV file 2'
 
-            merged_df = pd.concat([df1, df2], ignore_index=True)
-            
-            # Preprocess the merged data
-            preprocessed_df = preprocess_data(merged_df)
+                merged_df = pd.concat([df1, df2], ignore_index=True)
+                
+                # Preprocess the merged data
+                st.session_state.preprocessed_df = preprocess_data(merged_df)
             
             with st.expander("Preview of preprocessed data"):
-                st.dataframe(preprocessed_df.head())
+                st.dataframe(st.session_state.preprocessed_df.head())
             
             if st.session_state.current_viz is None:
-                initial_d3_code = generate_d3_code(preprocessed_df, api_key)
+                initial_d3_code = generate_d3_code(st.session_state.preprocessed_df, api_key)
                 st.session_state.current_viz = initial_d3_code
                 st.session_state.workflow_history.append({
                     "request": "Initial visualization",
@@ -202,13 +205,14 @@ def main():
             st.write("Press Enter to submit your request and update the visualization.")
             user_input = st.text_input("Enter your modification request:", key="user_input")
             if user_input:  # This will trigger when the user presses Enter
-                modified_d3_code = generate_d3_code(preprocessed_df, api_key, user_input)
+                modified_d3_code = generate_d3_code(st.session_state.preprocessed_df, api_key, user_input)
                 st.session_state.workflow_history.append({
                     "request": user_input,
                     "code": modified_d3_code
                 })
                 st.session_state.current_viz = modified_d3_code
-                st.rerun()  # Use st.rerun() instead of st.experimental_rerun()
+                st.empty()  # Clear the previous visualization
+                display_visualization(st.session_state.current_viz)
 
             with st.expander("View/Edit Visualization Code"):
                 code_editor = st.text_area("D3.js Code", value=st.session_state.current_viz, height=300, key="code_editor")
@@ -223,7 +227,8 @@ def main():
                                 "request": "Manual code edit",
                                 "code": code_editor
                             })
-                            st.rerun()  # Use st.rerun() instead of st.experimental_rerun()
+                            st.empty()  # Clear the previous visualization
+                            display_visualization(st.session_state.current_viz)
                         else:
                             st.warning("Enable 'Edit' to make changes.")
                 with col3:
@@ -238,7 +243,8 @@ def main():
                     st.write(f"Request: {step['request']}")
                     if st.button(f"Revert to Step {i+1}"):
                         st.session_state.current_viz = step['code']
-                        st.rerun()  # Use st.rerun() instead of st.experimental_rerun()
+                        st.empty()  # Clear the previous visualization
+                        display_visualization(st.session_state.current_viz)
 
         except Exception as e:
             st.error(f"An error occurred while processing the CSV files: {str(e)}")
