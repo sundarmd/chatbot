@@ -213,12 +213,21 @@ def generate_d3_code(df, api_key, user_input=""):
         return scaffold_code  # Return the scaffold code as a fallback
 
 def display_visualization(d3_code):
+    # Debug: Print the generated D3 code
+    st.text("Generated D3 Code:")
+    st.code(d3_code, language="javascript")
+
     html_content = f"""
     <script src="https://d3js.org/d3.v7.min.js"></script>
     <div id="visualization" style="width:100%; height:500px;"></div>
     <script>
     (function() {{
-        {d3_code}
+        try {{
+            {d3_code}
+        }} catch (error) {{
+            console.error('Error in D3 code:', error);
+            document.getElementById('visualization').innerHTML = '<p style="color: red;">Error generating visualization. Check console for details.</p>';
+        }}
     }})();
     </script>
     """
