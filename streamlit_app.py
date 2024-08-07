@@ -39,8 +39,11 @@ def main():
 
     # File upload section
     st.header("Upload CSV Files")
-    file1 = st.file_uploader("Upload first CSV file", type="csv")
-    file2 = st.file_uploader("Upload second CSV file", type="csv")
+    col1, col2 = st.columns(2)
+    with col1:
+        file1 = st.file_uploader("Upload first CSV file", type="csv")
+    with col2:
+        file2 = st.file_uploader("Upload second CSV file", type="csv")
 
     if file1 and file2 and api_key:
         try:
@@ -56,55 +59,67 @@ def main():
             merged_df = pd.concat([df1, df2], ignore_index=True)
             
             # Display preview of merged data
-            st.write("Preview of merged data:")
-            st.dataframe(merged_df.head())
+            with st.expander("Preview of merged data"):
+                st.dataframe(merged_df.head())
             
             # Initialize session state for workflow history
             if 'workflow_history' not in st.session_state:
                 st.session_state.workflow_history = []
 
             # Generate initial visualization
-            initial_d3_code = generate_d3_code(merged_df, api_key)
-            st.session_state.workflow_history.append(initial_d3_code)
+            if 'current_viz' not in st.session_state:
+                initial_d3_code = generate_d3_code(merged_df, api_key)
+                st.session_state.workflow_history.append(("Initial Visualization", initial_d3_code))
+                st.session_state.current_viz = initial_d3_code
 
-            # Display initial visualization
-            st.subheader("Initial Visualization")
-            display_visualization(initial_d3_code)
+            # Display current visualization
+            st.subheader("Current Visualization")
+            display_visualization(st.session_state.current_viz)
+
+            # Chat to modify visualization
+            st.subheader("Modify Visualization")
+            user_input = st.text_input("Enter your modification request:")
+            if st.button("Send Request"):
+                modified_d3_code = modify_visualization(merged_df, api_key, user_input, st.session_state.current_viz)
+                st.session_state.current_viz = modified_d3_code
+                st.session_state.workflow_history.append((user_input, modified_d3_code))
+                st.experimental_rerun()
 
             # Display and edit code
             with st.expander("View/Edit Visualization Code"):
-                code_editor = st.text_area("D3.js Code", value=initial_d3_code, height=300, disabled=True, key="code_editor")
-                col1, col2 = st.columns(2)
+                code_editor = st.text_area("D3.js Code", value=st.session_state.current_viz, height=300, key="code_editor")
+                col1, col2, col3 = st.columns([1,1,2])
                 with col1:
                     edit_enabled = st.toggle("Edit", key="edit_toggle")
                 with col2:
                     if st.button("Execute Code"):
                         if edit_enabled:
-                            st.session_state.workflow_history.append(st.session_state.code_editor)
-                            display_visualization(st.session_state.code_editor)
+                            st.session_state.current_viz = code_editor
+                            st.session_state.workflow_history.append(("Manual Edit", code_editor))
+                            st.experimental_rerun()
                         else:
                             st.warning("Enable 'Edit' to make changes.")
-
-            # Update text area based on toggle
-            if edit_enabled:
-                st.session_state.code_editor = st.text_area("D3.js Code", value=st.session_state.code_editor, height=300, key="editable_code")
+                with col3:
+                    if st.button("Copy Code"):
+                        st.write("Code copied to clipboard!")
+                        st.write(f'<textarea style="position: absolute; left: -9999px;">{code_editor}</textarea>', unsafe_allow_html=True)
+                        st.write('<script>document.querySelector("textarea").select();document.execCommand("copy");</script>', unsafe_allow_html=True)
 
             # Display workflow history
             st.subheader("Workflow History")
-            for i, code in enumerate(st.session_state.workflow_history):
-                with st.expander(f"Version {i+1}"):
-                    code_editor = st.text_area(f"Code Version {i+1}", value=code, height=300, key=f"history_{i}")
-                    if st.button(f"Execute Version {i+1}"):
-                        display_visualization(code_editor)
-                        st.session_state.workflow_history[i] = code_editor
-
-            # Chat with LLM to modify visualization
-            st.subheader("Chat to Modify Visualization")
-            user_input = st.text_input("Enter your modification request:")
-            if st.button("Send Request"):
-                modified_d3_code = modify_visualization(merged_df, api_key, user_input, initial_d3_code)
-                st.session_state.workflow_history.append(modified_d3_code)
-                display_visualization(modified_d3_code)
+            for i, (name, code) in enumerate(st.session_state.workflow_history):
+                with st.expander(f"Version {i+1}: {name}"):
+                    st.text_area(f"Code Version {i+1}", value=code, height=200, key=f"history_{i}")
+                    col1, col2 = st.columns([1,3])
+                    with col1:
+                        if st.button(f"Execute Version {i+1}"):
+                            st.session_state.current_viz = code
+                            st.experimental_rerun()
+                    with col2:
+                        if st.button(f"Copy Version {i+1}"):
+                            st.write(f"Version {i+1} copied to clipboard!")
+                            st.write(f'<textarea style="position: absolute; left: -9999px;">{code}</textarea>', unsafe_allow_html=True)
+                            st.write('<script>document.querySelector("textarea").select();document.execCommand("copy");</script>', unsafe_allow_html=True)
 
         except Exception as e:
             st.error(f"An error occurred while processing the CSV files: {str(e)}")
@@ -285,7 +300,7 @@ def modify_visualization(df, api_key, user_input, current_code):
 def display_visualization(d3_code):
     st.components.v1.html(f"""
         <script src="https://d3js.org/d3.v7.min.js"></script>
-        <div id="visualization" style="width:100%; height:550px;"></div>
+        <div id="visualization" style="width:100%; height:500px;"></div>
         <script>
         (function() {{
             try {{
@@ -298,7 +313,7 @@ def display_visualization(d3_code):
             }}
         }})();
         </script>
-    """, height=600, scrolling=True)
+    """, height=520, scrolling=False)
     st.write("If you don't see a visualization above, check the browser console for error messages.")
 
 if __name__ == "__main__":
