@@ -93,16 +93,24 @@ def generate_d3_code(df, api_key, user_input=""):
     else:
         prompt = base_prompt
 
-    response = client.chat.completions.create(
-        model="gpt-3.5-turbo",
-        messages=[
-            {"role": "system", "content": "You are a D3.js expert. Generate D3.js code based on the given requirements."},
-            {"role": "user", "content": prompt}
-        ]
-    )
-    
-    d3_code = response.choices[0].message.content
-    return postprocess_d3_code(d3_code)
+    try:
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "You are a D3.js expert. Generate D3.js code based on the given requirements."},
+                {"role": "user", "content": prompt}
+            ]
+        )
+        
+        d3_code = response.choices[0].message.content
+        if not d3_code.strip():
+            raise ValueError("Generated D3 code is empty")
+        
+        return postprocess_d3_code(d3_code)
+    except Exception as e:
+        st.error(f"Error generating D3 code: {str(e)}")
+        st.write("API Response:", response)  # Log the full API response
+        return None
 
 def display_visualization(d3_code):
     html_content = f"""
