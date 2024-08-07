@@ -55,6 +55,10 @@ def main():
             # Merge the dataframes
             merged_df = pd.concat([df1, df2], ignore_index=True)
             
+            # Display preview of merged data
+            st.write("Preview of merged data:")
+            st.dataframe(merged_df.head())
+            
             # Initialize session state for workflow history
             if 'workflow_history' not in st.session_state:
                 st.session_state.workflow_history = []
@@ -104,62 +108,88 @@ def main():
         st.info("Please upload both CSV files and provide an API key to visualize your data")
 
 def generate_d3_code(df, api_key):
-    client = OpenAI(api_key=api_key)
+    # Convert dataframe to JSON string
+    data_json = df.to_json(orient='records')
     
-    # Prepare data summary
-    columns = df.columns.tolist()
-    data_types = df.dtypes.to_dict()
-    data_sample = df.head(5).to_dict(orient='records')
-    
-    prompt = f"""
-    Generate D3.js code for an interactive visualization based on the following dataset:
-    
-    Columns: {columns}
-    Data types: {data_types}
-    Sample data: {json.dumps(data_sample)}
-    
-    Style and design requirements:
-    1. Use a clean, minimalist design with a white background.
-    2. Implement clear, legible labeling for all chart elements.
-    3. Include light gray gridlines to aid in reading values.
-    4. Use a distinct color scheme to differentiate between data categories or series.
-    5. Ensure the visualization is responsive and fits well within a Streamlit app.
-    6. Use larger font sizes for better readability.
-    7. Include a title and axis labels that clearly describe the data being visualized.
-    8. If applicable, place a legend outside the main plot area for clarity.
-    9. Remove unnecessary chart borders or elements to reduce visual clutter.
-    10. Implement smooth transitions for any interactive features or updates.
-    11. Add tooltips or interactive elements to display detailed information on user interaction.
-    12. Ensure the visualization is accessible with proper ARIA attributes.
+    d3_code = f"""
+    // Set the dimensions and margins of the graph
+    const margin = {{top: 20, right: 20, bottom: 30, left: 50}},
+          width = 960 - margin.left - margin.right,
+          height = 500 - margin.top - margin.bottom;
 
-    Technical requirements:
-    1. Use D3.js version 7 for compatibility.
-    2. Create the visualization within a div with the id 'visualization'.
-    3. Include all necessary data processing within the D3.js code.
-    4. Ensure the code can handle the given dataset structure and types.
-    5. Implement appropriate scales and axes based on the data characteristics.
-    6. Set the width to 100% of the container and height to 500px.
-    7. Add margin to the chart for labels and axes.
-    8. Ensure the code is bug-free and handles potential errors gracefully.
+    // Append the svg object to the visualization div
+    const svg = d3.select("#visualization")
+      .append("svg")
+        .attr("width", width + margin.left + margin.right)
+        .attr("height", height + margin.top + margin.bottom)
+      .append("g")
+        .attr("transform", `translate(${{margin.left}},${{margin.top}})`);
 
-    Please provide the complete D3.js code that can be directly used in a Streamlit component.
+    // Parse the Data
+    const data = {data_json};
+
+    console.log("Data:", data);  // Log the data for debugging
+
+    // List of columns for X axis
+    const columns = Object.keys(data[0]).filter(d => d !== 'Source');
+
+    // Add X axis
+    const x = d3.scalePoint()
+      .domain(columns)
+      .range([0, width]);
+    svg.append("g")
+      .attr("transform", `translate(0, ${{height}})`)
+      .call(d3.axisBottom(x));
+
+    // Add Y axis
+    const y = d3.scaleLinear()
+      .domain([0, d3.max(data, d => d3.max(columns, c => +d[c]))])
+      .range([height, 0]);
+    svg.append("g")
+      .call(d3.axisLeft(y));
+
+    // Color scale
+    const color = d3.scaleOrdinal(d3.schemeCategory10);
+
+    // Draw the lines
+    const line = d3.line()
+      .x(d => x(d.column))
+      .y(d => y(+d.value));
+
+    data.forEach((d, i) => {{
+      const sourceData = columns.map(column => ({{column: column, value: d[column]}}));
+      svg.append("path")
+        .datum(sourceData)
+        .attr("fill", "none")
+        .attr("stroke", color(i))
+        .attr("stroke-width", 1.5)
+        .attr("d", line);
+    }});
+
+    // Add the legend
+    const legend = svg.selectAll(".legend")
+      .data(data.map(d => d.Source))
+      .enter().append("g")
+        .attr("class", "legend")
+        .attr("transform", (d, i) => `translate(0,${{i * 20}})`);
+
+    legend.append("rect")
+      .attr("x", width - 18)
+      .attr("width", 18)
+      .attr("height", 18)
+      .style("fill", (d, i) => color(i));
+
+    legend.append("text")
+      .attr("x", width - 24)
+      .attr("y", 9)
+      .attr("dy", ".35em")
+      .style("text-anchor", "end")
+      .text(d => d);
+
+    console.log("D3 code executed successfully");
     """
-
-    try:
-        response = client.chat.completions.create(
-            model="gpt-4",
-            messages=[
-                {"role": "system", "content": "You are a D3.js expert. Generate only the code without any explanations."},
-                {"role": "user", "content": prompt}
-            ],
-            max_tokens=2500,
-            n=1,
-            temperature=0.7,
-        )
-        return response.choices[0].message.content.strip()
-    except Exception as e:
-        st.error(f"An error occurred while generating the D3.js code: {str(e)}")
-        return ""
+    
+    return d3_code
 
 def modify_visualization(df, api_key, user_input, current_code):
     client = OpenAI(api_key=api_key)
@@ -208,13 +238,21 @@ def modify_visualization(df, api_key, user_input, current_code):
 def display_visualization(d3_code):
     st.components.v1.html(f"""
         <script src="https://d3js.org/d3.v7.min.js"></script>
-        <div id="visualization" style="width:100%; height:500px;"></div>
+        <div id="visualization" style="width:100%; height:550px;"></div>
         <script>
         (function() {{
-            {d3_code}
+            try {{
+                console.log("Executing D3.js code");
+                {d3_code}
+                console.log("D3.js code executed successfully");
+            }} catch (error) {{
+                console.error("Error in D3.js code:", error);
+                document.getElementById("visualization").innerHTML = "<p style='color: red;'>Error rendering visualization. Check the console for details.</p>";
+            }}
         }})();
         </script>
-    """, height=550, scrolling=True)
+    """, height=600, scrolling=True)
+    st.write("If you don't see a visualization above, check the browser console for error messages.")
 
 if __name__ == "__main__":
     main()
