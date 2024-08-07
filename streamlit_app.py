@@ -92,6 +92,8 @@ def generate_d3_code(df: pd.DataFrame, api_key: str, user_input: str = "") -> st
     6. Ensure the chart is responsive and fits within an 800x500 pixel area.
     7. Handle potential null or undefined values gracefully.
     8. Include grid lines and appropriate scales for better readability.
+    9. Use D3.js version 7 syntax.
+    10. Wrap the entire D3 code in a function named createVisualization(data).
 
     Return only the D3.js code without any explanations.
     """
@@ -116,76 +118,18 @@ def generate_d3_code(df: pd.DataFrame, api_key: str, user_input: str = "") -> st
         logger.error(f"Error generating D3 code: {str(e)}")
         return generate_fallback_visualization(df)
 
-def generate_fallback_visualization(df: pd.DataFrame) -> str:
-    """Generate a basic D3 visualization as a fallback."""
-    logger.info("Generating fallback visualization")
-    # Implement a simple bar chart comparing the first numeric column across the two sources
-    numeric_cols = df.select_dtypes(include=['int64', 'float64']).columns
-    if len(numeric_cols) > 0:
-        compare_col = numeric_cols[0]
-    else:
-        compare_col = df.columns[0]  # Fallback to first column if no numeric columns
-
-    fallback_code = f"""
-    const data = {df.to_dict(orient='records')};
-    const margin = {{top: 50, right: 30, bottom: 50, left: 60}};
-    const width = 800 - margin.left - margin.right;
-    const height = 500 - margin.top - margin.bottom;
-
-    const svg = d3.select("#visualization")
-      .append("svg")
-        .attr("width", width + margin.left + margin.right)
-        .attr("height", height + margin.top + margin.bottom)
-      .append("g")
-        .attr("transform", `translate(${{margin.left}},${{margin.top}})`);
-
-    const x = d3.scaleBand()
-      .range([0, width])
-      .domain(['CSV file 1', 'CSV file 2'])
-      .padding(0.2);
-    svg.append("g")
-      .attr("transform", `translate(0,${{height}})`)
-      .call(d3.axisBottom(x));
-
-    const y = d3.scaleLinear()
-      .domain([0, d3.max(data, d => +d['{compare_col}'])])
-      .range([height, 0]);
-    svg.append("g")
-      .call(d3.axisLeft(y));
-
-    svg.selectAll("mybar")
-      .data(data)
-      .join("rect")
-        .attr("x", d => x(d.Source))
-        .attr("y", d => y(d['{compare_col}']))
-        .attr("width", x.bandwidth())
-        .attr("height", d => height - y(d['{compare_col}']))
-        .attr("fill", d => d.Source === 'CSV file 1' ? "#69b3a2" : "#404080");
-
-    svg.append("text")
-      .attr("x", width / 2)
-      .attr("y", 0 - (margin.top / 2))
-      .attr("text-anchor", "middle")
-      .style("font-size", "16px")
-      .text("Comparison of {compare_col} between CSV files");
-    """
-    return fallback_code
-
 def postprocess_d3_code(code: str) -> str:
     """Post-process the generated D3.js code to catch common issues."""
-    # Ensure proper function closure
-    if "function updateChart(data) {" in code and code.count("}") < code.count("{"):
-        code += "\n}"
+    # Ensure the code is wrapped in a function if it's not already
+    if "function createVisualization(data) {" not in code:
+        code = f"function createVisualization(data) {{\n{code}\n}}"
     
     # Replace unsupported d3.event with d3.pointer
     code = code.replace("d3.event", "d3.pointer(event)")
     
-    # Ensure color scale is defined
+    # Ensure color scale is defined if used
     if "color(" in code and "const color = " not in code:
         code = "const color = d3.scaleOrdinal(d3.schemeCategory10);\n" + code
-    
-    # Add error handling
-    code = "try {\n" + code + "\n} catch (error) { console.error('Error in D3 code:', error); }"
     
     return code
 
@@ -195,20 +139,16 @@ def display_visualization(d3_code: str) -> str:
     <div id="visualization"></div>
     <script src="https://d3js.org/d3.v7.min.js"></script>
     <script>
-    function runD3Code() {{
-        try {{
-            {d3_code}
-        }} catch (error) {{
-            console.error('Error in D3 code:', error);
-            document.getElementById('visualization').innerHTML = '<p style="color: red;">Error generating visualization. Check console for details.</p>';
-        }}
-    }}
+    {d3_code}
     
-    if (document.readyState === 'complete') {{
-        runD3Code();
-    }} else {{
-        document.addEventListener('DOMContentLoaded', runD3Code);
-    }}
+    // Fetch data and create visualization
+    fetch('http://localhost:8501/session')
+        .then(response => response.json())
+        .then(sessionState => {{
+            const data = sessionState.preprocessed_df;
+            createVisualization(data);
+        }})
+        .catch(error => console.error('Error fetching data:', error));
     </script>
     """
     return html_content
@@ -233,11 +173,12 @@ def main():
             
             # Preprocess and merge the data
             merged_df = preprocess_data(df1, df2)
+            st.session_state.preprocessed_df = merged_df.to_dict(orient='records')
             
             with st.expander("Preview of preprocessed data"):
                 st.dataframe(merged_df.head())
             
-            if 'current_viz' not in st.session_state:
+            if 'current_viz' not in st.session_state or st.session_state.current_viz is None:
                 initial_d3_code = generate_d3_code(merged_df, api_key)
                 st.session_state.current_viz = initial_d3_code
                 st.session_state.workflow_history.append({
@@ -246,8 +187,7 @@ def main():
                 })
 
             st.subheader("Current Visualization")
-            viz_placeholder = st.empty()
-            viz_placeholder.write(display_visualization(st.session_state.current_viz))
+            st.components.v1.html(display_visualization(st.session_state.current_viz), height=600)
 
             st.subheader("Modify Visualization")
             user_input = st.text_input("Enter your modification request:")
@@ -259,9 +199,7 @@ def main():
                         "request": user_input,
                         "code": modified_d3_code
                     })
-                    viz_placeholder.empty()
-                    viz_placeholder.write(display_visualization(st.session_state.current_viz))
-                    st.success("Visualization updated successfully!")
+                    st.experimental_rerun()
                 else:
                     st.warning("Please enter a modification request.")
 
@@ -298,8 +236,7 @@ def main():
                         display_visualization(st.session_state.current_viz)
 
         except Exception as e:
-            logger.error(f"An error occurred while processing the CSV files: {str(e)}")
-            st.error(f"An error occurred while processing the CSV files: {str(e)}")
+            st.error(f"An error occurred: {str(e)}")
             st.code(traceback.format_exc())
     else:
         st.info("Please upload both CSV files and provide an API key to visualize your data")
