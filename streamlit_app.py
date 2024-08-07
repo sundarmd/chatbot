@@ -63,27 +63,31 @@ def main():
             if 'workflow_history' not in st.session_state:
                 st.session_state.workflow_history = []
 
-            # Generate initial line chart visualization using LLM
+            # Generate initial visualization
             initial_d3_code = generate_d3_code(merged_df, api_key)
             st.session_state.workflow_history.append(initial_d3_code)
 
             # Display initial visualization
-            st.subheader("Initial Line Chart Visualization")
+            st.subheader("Initial Visualization")
             display_visualization(initial_d3_code)
 
             # Display and edit code
             with st.expander("View/Edit Visualization Code"):
-                code_editor = st.text_area("D3.js Code", value=initial_d3_code, height=300)
+                code_editor = st.text_area("D3.js Code", value=initial_d3_code, height=300, disabled=True, key="code_editor")
                 col1, col2 = st.columns(2)
                 with col1:
-                    editable = st.toggle("Make Code Editable")
+                    edit_enabled = st.toggle("Edit", key="edit_toggle")
                 with col2:
                     if st.button("Execute Code"):
-                        if editable:
-                            st.session_state.workflow_history.append(code_editor)
-                            display_visualization(code_editor)
+                        if edit_enabled:
+                            st.session_state.workflow_history.append(st.session_state.code_editor)
+                            display_visualization(st.session_state.code_editor)
                         else:
-                            st.warning("Enable 'Make Code Editable' to execute changes.")
+                            st.warning("Enable 'Edit' to make changes.")
+
+            # Update text area based on toggle
+            if edit_enabled:
+                st.session_state.code_editor = st.text_area("D3.js Code", value=st.session_state.code_editor, height=300, key="editable_code")
 
             # Display workflow history
             st.subheader("Workflow History")
@@ -108,90 +112,130 @@ def main():
         st.info("Please upload both CSV files and provide an API key to visualize your data")
 
 def generate_d3_code(df, api_key):
-    # Convert dataframe to JSON string
-    data_json = df.to_json(orient='records')
-    
-    d3_code = f"""
-    // Set the dimensions and margins of the graph
-    const margin = {{top: 20, right: 20, bottom: 30, left: 50}},
-          width = 960 - margin.left - margin.right,
-          height = 500 - margin.top - margin.bottom;
+    # Prepare data summary
+    columns = df.columns.tolist()
+    data_types = df.dtypes.to_dict()
+    data_sample = df.head(5).to_dict(orient='records')
+    data_summary = {
+        "columns": columns,
+        "data_types": {str(k): str(v) for k, v in data_types.items()},
+        "sample_data": data_sample
+    }
 
-    // Append the svg object to the visualization div
+    scaffold_code = """
+    // D3.js Visualization Scaffold for Dark Background
+
+    // Set up SVG
+    const margin = {top: 40, right: 100, bottom: 60, left: 60};
+    const width = 800 - margin.left - margin.right;
+    const height = 500 - margin.top - margin.bottom;
+
     const svg = d3.select("#visualization")
-      .append("svg")
+        .append("svg")
         .attr("width", width + margin.left + margin.right)
         .attr("height", height + margin.top + margin.bottom)
-      .append("g")
-        .attr("transform", `translate(${{margin.left}},${{margin.top}})`);
+        .append("g")
+        .attr("transform", `translate(${margin.left},${margin.top})`);
 
-    // Parse the Data
-    const data = {data_json};
+    // Set up scales (example for numerical data)
+    const x = d3.scaleLinear().range([0, width]);
+    const y = d3.scaleLinear().range([height, 0]);
 
-    console.log("Data:", data);  // Log the data for debugging
-
-    // List of columns for X axis
-    const columns = Object.keys(data[0]).filter(d => d !== 'Source');
-
-    // Add X axis
-    const x = d3.scalePoint()
-      .domain(columns)
-      .range([0, width]);
-    svg.append("g")
-      .attr("transform", `translate(0, ${{height}})`)
-      .call(d3.axisBottom(x));
-
-    // Add Y axis
-    const y = d3.scaleLinear()
-      .domain([0, d3.max(data, d => d3.max(columns, c => +d[c]))])
-      .range([height, 0]);
-    svg.append("g")
-      .call(d3.axisLeft(y));
-
-    // Color scale
+    // Set up color scale
     const color = d3.scaleOrdinal(d3.schemeCategory10);
 
-    // Draw the lines
-    const line = d3.line()
-      .x(d => x(d.column))
-      .y(d => y(+d.value));
+    // Add axes
+    const xAxis = svg.append("g")
+        .attr("transform", `translate(0,${height})`)
+        .attr("class", "axis");
 
-    data.forEach((d, i) => {{
-      const sourceData = columns.map(column => ({{column: column, value: d[column]}}));
-      svg.append("path")
-        .datum(sourceData)
-        .attr("fill", "none")
-        .attr("stroke", color(i))
-        .attr("stroke-width", 1.5)
-        .attr("d", line);
-    }});
+    const yAxis = svg.append("g")
+        .attr("class", "axis");
 
-    // Add the legend
-    const legend = svg.selectAll(".legend")
-      .data(data.map(d => d.Source))
-      .enter().append("g")
+    // Add gridlines
+    svg.append("g")
+        .attr("class", "grid")
+        .attr("transform", `translate(0,${height})`)
+        .call(d3.axisBottom(x).tickSize(-height).tickFormat(""));
+
+    svg.append("g")
+        .attr("class", "grid")
+        .call(d3.axisLeft(y).tickSize(-width).tickFormat(""));
+
+    // Add title
+    svg.append("text")
+        .attr("x", width / 2)
+        .attr("y", -margin.top / 2)
+        .attr("text-anchor", "middle")
+        .style("font-size", "16px")
+        .style("fill", "#ffffff")
+        .text("Visualization Title");
+
+    // Style for dark background
+    svg.selectAll(".axis path, .axis line, .grid line")
+        .style("stroke", "#cccccc")
+        .style("opacity", 0.2);
+
+    svg.selectAll(".axis text")
+        .style("fill", "#ffffff");
+
+    // Add legend
+    const legend = svg.append("g")
         .attr("class", "legend")
-        .attr("transform", (d, i) => `translate(0,${{i * 20}})`);
+        .attr("transform", `translate(${width + 20}, 0)`);
 
-    legend.append("rect")
-      .attr("x", width - 18)
-      .attr("width", 18)
-      .attr("height", 18)
-      .style("fill", (d, i) => color(i));
+    // Function to update the chart (to be implemented based on data)
+    function updateChart(data) {
+        // Implementation depends on the specific chart type and data structure
+    }
 
-    legend.append("text")
-      .attr("x", width - 24)
-      .attr("y", 9)
-      .attr("dy", ".35em")
-      .style("text-anchor", "end")
-      .text(d => d);
-
-    console.log("D3 code executed successfully");
+    // Load and process data
+    // d3.json("data.json").then(function(data) {
+    //     updateChart(data);
+    // });
     """
-    
-    return d3_code
+
+    client = OpenAI(api_key=api_key)
+    prompt = f"""
+    Given the following data summary and D3.js scaffold, create a visualization that best represents the data:
+
+    Data Summary:
+    {json.dumps(data_summary, indent=2)}
+
+    D3.js Scaffold:
+    {scaffold_code}
+
+    Please complete the scaffold code to create an appropriate visualization for this data.
+    Ensure the visualization is optimized for a dark background and includes interactive elements like tooltips.
+    """
+
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": "You are a D3.js expert. Generate only the code without explanations."},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=2500,
+            n=1,
+            temperature=0.7,
+        )
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        st.error(f"An error occurred while generating the D3.js code: {str(e)}")
+        return ""
 
 def modify_visualization(df, api_key, user_input, current_code):
+    # Prepare data summary
+    columns = df.columns.tolist()
+    data_types = df.dtypes.to_dict()
+    data_sample = df.head(5).to_dict(orient='records')
+    data_summary = {
+        "columns": columns,
+        "data_types": {str(k): str(v) for k, v in data_types.items()},
+        "sample_data": data_sample
+    }
+
     client = OpenAI(api_key=api_key)
     
     prompt = f"""
@@ -202,13 +246,16 @@ def modify_visualization(df, api_key, user_input, current_code):
     Current D3.js code:
     {current_code}
 
+    Data Summary:
+    {json.dumps(data_summary, indent=2)}
+
     Please provide the modified D3.js code that incorporates the user's request while maintaining the existing functionality.
     Ensure the code uses D3.js version 7 and creates the chart within the 'visualization' div.
-    Maintain the style and design requirements from the original visualization:
-    1. Clean, minimalist design with a white background
-    2. Clear, legible labeling
+    Maintain the style and design requirements for a dark background:
+    1. Clean, minimalist design with a dark background
+    2. Clear, legible labeling with light text
     3. Light gray gridlines
-    4. Distinct color scheme for data categories
+    4. Distinct color scheme for data categories, suitable for dark backgrounds
     5. Responsive design
     6. Large, readable font sizes
     7. Clear title and axis labels
