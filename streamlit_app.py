@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-import openai
+from openai import OpenAI
 import os
 import json
 
@@ -104,7 +104,7 @@ def main():
         st.info("Please upload both CSV files and provide an API key to visualize your data")
 
 def generate_d3_code(df, api_key):
-    openai.api_key = api_key
+    client = OpenAI(api_key=api_key)
     
     # Prepare data summary
     columns = df.columns.tolist()
@@ -131,7 +131,7 @@ def generate_d3_code(df, api_key):
     """
 
     try:
-        response = openai.ChatCompletion.create(
+        response = client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": "You are a D3.js expert. Generate only the code without any explanations."},
@@ -147,7 +147,7 @@ def generate_d3_code(df, api_key):
         return ""
 
 def modify_visualization(df, api_key, user_input, current_code):
-    openai.api_key = api_key
+    client = OpenAI(api_key=api_key)
     
     prompt = f"""
     Modify the following D3.js code based on the user's request:
@@ -161,7 +161,7 @@ def modify_visualization(df, api_key, user_input, current_code):
     """
 
     try:
-        response = openai.ChatCompletion.create(
+        response = client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": "You are a D3.js expert. Modify the given code based on the user's request."},
