@@ -59,8 +59,23 @@ def postprocess_d3_code(code):
 
 def generate_d3_code(df, api_key, user_input=""):
     columns = df.columns.tolist()[:2]
-    data_sample = df.to_dict(orient='records')  # Use all data instead of just head(5)
+    data_sample = df.to_dict(orient='records')
     
+    # If there's a user input, use OpenAI to modify the existing code
+    if user_input:
+        client = OpenAI(api_key=api_key)
+        prompt = f"Modify the following D3.js code according to this request: {user_input}\n\nExisting code:\n{st.session_state.current_viz}"
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "You are a D3.js expert. Modify the given code according to the user's request."},
+                {"role": "user", "content": prompt}
+            ]
+        )
+        modified_code = response.choices[0].message.content
+        return postprocess_d3_code(modified_code)
+    
+    # If no user input, generate initial code
     d3_code = f"""
     // Set the dimensions and margins of the graph
     const margin = {{top: 30, right: 30, bottom: 70, left: 60}},
@@ -193,7 +208,7 @@ def main():
                     "code": modified_d3_code
                 })
                 st.session_state.current_viz = modified_d3_code
-                st.experimental_rerun()  # This will rerun the script and update the visualization
+                st.rerun()  # Use st.rerun() instead of st.experimental_rerun()
 
             with st.expander("View/Edit Visualization Code"):
                 code_editor = st.text_area("D3.js Code", value=st.session_state.current_viz, height=300, key="code_editor")
@@ -208,7 +223,7 @@ def main():
                                 "request": "Manual code edit",
                                 "code": code_editor
                             })
-                            st.experimental_rerun()  # This will rerun the script and update the visualization
+                            st.rerun()  # Use st.rerun() instead of st.experimental_rerun()
                         else:
                             st.warning("Enable 'Edit' to make changes.")
                 with col3:
@@ -223,7 +238,7 @@ def main():
                     st.write(f"Request: {step['request']}")
                     if st.button(f"Revert to Step {i+1}"):
                         st.session_state.current_viz = step['code']
-                        st.experimental_rerun()  # This will rerun the script and update the visualization
+                        st.rerun()  # Use st.rerun() instead of st.experimental_rerun()
 
         except Exception as e:
             st.error(f"An error occurred while processing the CSV files: {str(e)}")
