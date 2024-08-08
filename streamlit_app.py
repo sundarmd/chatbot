@@ -148,45 +148,13 @@ def postprocess_d3_code(code: str) -> str:
 def display_visualization(d3_code: str) -> str:
     """Generate the HTML content for displaying the D3.js visualization."""
     html_content = f"""
-    <style>
-        .tooltip {{
-            position: absolute;
-            background-color: white;
-            border: 1px solid #ddd;
-            padding: 10px;
-            pointer-events: none;
-        }}
-    </style>
     <div id="visualization"></div>
     <script src="https://d3js.org/d3.v7.min.js"></script>
     <script>
     (function() {{
         const data = {json.dumps(st.session_state.preprocessed_df)};
-        const createVisualization = (data) => {{
-            // Error checking
-            if (!data || !Array.isArray(data) || data.length === 0) {{
-                console.error('Invalid or empty data provided to createVisualization');
-                return;
-            }}
-            
-            {d3_code}
-        }};
+        {d3_code}
         createVisualization(data);
-        
-        // Make the chart responsive
-        function resizeChart() {{
-            const container = d3.select('#visualization');
-            const containerWidth = container.node().getBoundingClientRect().width;
-            const containerHeight = containerWidth * (500 / 800);
-            
-            d3.select('#visualization svg')
-                .attr('width', containerWidth)
-                .attr('height', containerHeight);
-        }}
-        
-        // Call resize function initially and on window resize
-        resizeChart();
-        window.addEventListener('resize', resizeChart);
     }})();
     </script>
     """
@@ -210,20 +178,18 @@ def main():
     with col2:
         file2 = st.file_uploader("Upload second CSV file", type="csv")
 
-    if file1 and file2 and api_key:
+    if file1 and file2:
         try:
-            df1 = pd.read_csv(file1)
-            df2 = pd.read_csv(file2)
-            
-            # Preprocess and merge the data
-            merged_df = preprocess_data(df1, df2)
+            with st.spinner("Preprocessing data..."):
+                merged_df = preprocess_data(file1, file2)
             st.session_state.preprocessed_df = merged_df.to_dict(orient='records')
             
             with st.expander("Preview of preprocessed data"):
                 st.dataframe(merged_df.head())
             
             if 'current_viz' not in st.session_state or st.session_state.current_viz is None:
-                initial_d3_code = generate_d3_code(merged_df, api_key)
+                with st.spinner("Generating initial visualization..."):
+                    initial_d3_code = generate_d3_code(merged_df)
                 st.session_state.current_viz = initial_d3_code
                 st.session_state.workflow_history.append({
                     "request": "Initial comparative visualization",
@@ -234,34 +200,18 @@ def main():
             st.components.v1.html(display_visualization(st.session_state.current_viz), height=600)
 
             st.subheader("Modify Visualization")
-            modification_options = [
-                "Change chart type",
-                "Adjust color scheme",
-                "Add annotations",
-                "Modify axes",
-                "Change data representation",
-                "Add trend lines",
-                "Modify legend",
-                "Other (please specify)"
-            ]
-            selected_option = st.selectbox("Choose modification type:", modification_options)
-            user_input = st.text_input("Enter your modification request:")
+            user_input = st.text_area("Enter your modification request:", height=100)
             
-            if 'update_viz' not in st.session_state:
-                st.session_state.update_viz = False
-
-            if st.button("Update Visualization") or st.session_state.update_viz:
+            if st.button("Update Visualization"):
                 if user_input:
                     with st.spinner("Generating updated visualization..."):
-                        modified_d3_code = generate_d3_code(merged_df, f"{selected_option}: {user_input}")
+                        modified_d3_code = generate_d3_code(merged_df, user_input)
                     st.session_state.current_viz = modified_d3_code
                     st.session_state.workflow_history.append({
-                        "request": f"{selected_option}: {user_input}",
+                        "request": user_input,
                         "code": modified_d3_code
                     })
-                    if len(st.session_state.workflow_history) > MAX_WORKFLOW_HISTORY:
-                        st.session_state.workflow_history.pop(0)
-                    st.session_state.update_viz = False
+                    st.rerun()
                 else:
                     st.warning("Please enter a modification request.")
 
@@ -304,8 +254,9 @@ def main():
             logger.error(f"Error in main function: {str(e)}")
             logger.error(traceback.format_exc())
             st.error("An unexpected error occurred. Please try again or contact support if the problem persists.")
+            st.code(traceback.format_exc())  # Display traceback for debugging
     else:
-        st.info("Please upload both CSV files and provide a valid API key to visualize your data")
+        st.info("Please upload both CSV files to visualize your data")
 
 if __name__ == "__main__":
     main()
