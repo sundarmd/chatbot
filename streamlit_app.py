@@ -94,6 +94,9 @@ def generate_d3_code(df: pd.DataFrame, api_key: str, user_input: str = "") -> st
     8. Include grid lines and appropriate scales for better readability.
     9. Use D3.js version 7 syntax.
     10. Wrap the entire D3 code in a function named createVisualization(data).
+    11. Add accessibility features such as ARIA labels.
+    12. Implement data sampling for large datasets.
+    13. Use relative positioning for tooltips.
 
     Return only the D3.js code without any explanations.
     """
@@ -120,38 +123,79 @@ def generate_d3_code(df: pd.DataFrame, api_key: str, user_input: str = "") -> st
 
 def postprocess_d3_code(code: str) -> str:
     """Post-process the generated D3.js code to catch common issues."""
-    # Ensure the code is wrapped in a function if it's not already
-    if "function createVisualization(data) {" not in code:
-        code = f"function createVisualization(data) {{\n{code}\n}}"
+    # Remove the outer function if it exists
+    if code.startswith("function createVisualization(data) {"):
+        code = code[len("function createVisualization(data) {"):-1].strip()
     
     # Replace unsupported d3.event with d3.pointer
     code = code.replace("d3.event", "d3.pointer(event)")
     
     # Ensure color scale is defined if used
-    if "color(" in code and "const color = " not in code:
-        code = "const color = d3.scaleOrdinal(d3.schemeCategory10);\n" + code
+    if "colorScale(" in code and "const colorScale = " not in code:
+        code = "const colorScale = d3.scaleOrdinal(d3.schemeCategory10);\n" + code
+    
+    # Add error checking for data structure
+    code = "console.log(data[0]);\n" + code
+    
+    # Add data sampling for large datasets
+    code = """
+    const sampleSize = 1000;
+    const sampledData = data.length > sampleSize ? data.slice(0, sampleSize) : data;
+    """ + code.replace("data", "sampledData")
     
     return code
 
 def display_visualization(d3_code: str) -> str:
     """Generate the HTML content for displaying the D3.js visualization."""
     html_content = f"""
+    <style>
+        .tooltip {{
+            position: absolute;
+            background-color: white;
+            border: 1px solid #ddd;
+            padding: 10px;
+            pointer-events: none;
+        }}
+    </style>
     <div id="visualization"></div>
     <script src="https://d3js.org/d3.v7.min.js"></script>
     <script>
-    {d3_code}
-    
-    // Fetch data and create visualization
-    fetch('http://localhost:8501/session')
-        .then(response => response.json())
-        .then(sessionState => {{
-            const data = sessionState.preprocessed_df;
-            createVisualization(data);
-        }})
-        .catch(error => console.error('Error fetching data:', error));
+    (function() {{
+        const data = {json.dumps(st.session_state.preprocessed_df)};
+        const createVisualization = (data) => {{
+            // Error checking
+            if (!data || !Array.isArray(data) || data.length === 0) {{
+                console.error('Invalid or empty data provided to createVisualization');
+                return;
+            }}
+            
+            {d3_code}
+        }};
+        createVisualization(data);
+        
+        // Make the chart responsive
+        function resizeChart() {{
+            const container = d3.select('#visualization');
+            const containerWidth = container.node().getBoundingClientRect().width;
+            const containerHeight = containerWidth * (500 / 800);
+            
+            d3.select('#visualization svg')
+                .attr('width', containerWidth)
+                .attr('height', containerHeight);
+        }}
+        
+        // Call resize function initially and on window resize
+        resizeChart();
+        window.addEventListener('resize', resizeChart);
+    }})();
     </script>
     """
     return html_content
+
+def generate_fallback_visualization(df: pd.DataFrame) -> str:
+    """Generate a fallback visualization if the LLM fails."""
+    # Implement a simple bar chart or scatter plot here
+    pass
 
 def main():
     st.set_page_config(page_title="ChartChat", layout="wide")
@@ -190,16 +234,34 @@ def main():
             st.components.v1.html(display_visualization(st.session_state.current_viz), height=600)
 
             st.subheader("Modify Visualization")
+            modification_options = [
+                "Change chart type",
+                "Adjust color scheme",
+                "Add annotations",
+                "Modify axes",
+                "Change data representation",
+                "Add trend lines",
+                "Modify legend",
+                "Other (please specify)"
+            ]
+            selected_option = st.selectbox("Choose modification type:", modification_options)
             user_input = st.text_input("Enter your modification request:")
-            if st.button("Update Visualization"):
+            
+            if 'update_viz' not in st.session_state:
+                st.session_state.update_viz = False
+
+            if st.button("Update Visualization") or st.session_state.update_viz:
                 if user_input:
-                    modified_d3_code = generate_d3_code(merged_df, api_key, user_input)
+                    with st.spinner("Generating updated visualization..."):
+                        modified_d3_code = generate_d3_code(merged_df, f"{selected_option}: {user_input}")
                     st.session_state.current_viz = modified_d3_code
                     st.session_state.workflow_history.append({
-                        "request": user_input,
+                        "request": f"{selected_option}: {user_input}",
                         "code": modified_d3_code
                     })
-                    st.experimental_rerun()
+                    if len(st.session_state.workflow_history) > MAX_WORKFLOW_HISTORY:
+                        st.session_state.workflow_history.pop(0)
+                    st.session_state.update_viz = False
                 else:
                     st.warning("Please enter a modification request.")
 
@@ -216,8 +278,10 @@ def main():
                                 "request": "Manual code edit",
                                 "code": code_editor
                             })
+                            if len(st.session_state.workflow_history) > MAX_WORKFLOW_HISTORY:
+                                st.session_state.workflow_history.pop(0)
                             st.empty()  # Clear the previous visualization
-                            display_visualization(st.session_state.current_viz)
+                            st.components.v1.html(display_visualization(st.session_state.current_viz), height=600)
                         else:
                             st.warning("Enable 'Edit' to make changes.")
                 with col3:
@@ -233,13 +297,15 @@ def main():
                     if st.button(f"Revert to Step {i+1}"):
                         st.session_state.current_viz = step['code']
                         st.empty()  # Clear the previous visualization
-                        display_visualization(st.session_state.current_viz)
+                        st.components.v1.html(display_visualization(st.session_state.current_viz), height=600)
 
         except Exception as e:
             st.error(f"An error occurred: {str(e)}")
-            st.code(traceback.format_exc())
+            logger.error(f"Error in main function: {str(e)}")
+            logger.error(traceback.format_exc())
+            st.error("An unexpected error occurred. Please try again or contact support if the problem persists.")
     else:
-        st.info("Please upload both CSV files and provide an API key to visualize your data")
+        st.info("Please upload both CSV files and provide a valid API key to visualize your data")
 
 if __name__ == "__main__":
     main()
