@@ -10,6 +10,7 @@ import re
 import pyLDAvis
 from streamlit import components
 import tempfile
+from streamlit_d3_demo import d3_line
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -227,39 +228,9 @@ def clean_d3_response(response: str) -> str:
     
     return '\n'.join(clean_lines)
 
-def display_visualization(d3_code: str) -> str:
-    """Generate an HTML file for displaying the D3.js visualization and return its path."""
-    html_content = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <script src="https://d3js.org/d3.v7.min.js"></script>
-        <style>
-            body {{ margin: 0; padding: 0; }}
-            #visualization {{ width: 100%; height: 100%; }}
-        </style>
-    </head>
-    <body>
-        <div id="visualization"></div>
-        <script>
-        (function() {{
-            const data = {json.dumps(st.session_state.preprocessed_df)};
-            const svgElement = d3.select("#visualization").append("svg")
-                .attr("width", "100%")
-                .attr("height", "100%")
-                .attr("viewBox", "0 0 800 500");
-            {d3_code}
-            createVisualization(data, svgElement);
-        }})();
-        </script>
-    </body>
-    </html>
-    """
-    
-    # Create a temporary file to store the HTML content
-    with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".html") as f:
-        f.write(html_content)
-        return f.name
+def display_visualization(d3_code: str):
+    """Display the D3.js visualization using streamlit-D3-demo."""
+    d3_line(d3_code, st.session_state.preprocessed_df, 800, 500)
 
 def generate_fallback_visualization() -> str:
     """Generate a fallback visualization if the LLM fails."""
@@ -367,8 +338,8 @@ def main():
                     })
 
             st.subheader("Current Visualization")
-            viz_path = display_visualization(st.session_state.current_viz)
-            st.components.v1.iframe(viz_path, width=820, height=520)
+            with st.spinner("Preparing visualization..."):
+                display_visualization(st.session_state.current_viz)
 
             st.subheader("Modify Visualization")
             user_input = st.text_area("Enter your modification request:", height=100)
