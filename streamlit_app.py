@@ -38,13 +38,18 @@ def test_api_key(api_key: str) -> bool:
         logger.error(f"API key validation failed: {str(e)}")
         return False
 
-def preprocess_data(file1: st.uploaded_file_manager.UploadedFile, file2: st.uploaded_file_manager.UploadedFile) -> pd.DataFrame:
+def preprocess_data(file1: st.UploadedFile, file2: st.UploadedFile) -> pd.DataFrame:
     """Preprocess and merge the two dataframes for comparison."""
     logger.info("Starting data preprocessing")
     try:
         # First, read the CSV files into pandas DataFrames
-        df1 = pd.read_csv(file1)
-        df2 = pd.read_csv(file2)
+        try:
+            df1 = pd.read_csv(file1)
+            df2 = pd.read_csv(file2)
+        except pd.errors.EmptyDataError:
+            raise ValueError("One or both of the uploaded files are empty.")
+        except pd.errors.ParserError:
+            raise ValueError("Error parsing the CSV files. Please ensure they are valid CSV format.")
         
         # Now add the Source column
         df1['Source'] = 'CSV file 1'
