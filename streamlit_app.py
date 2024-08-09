@@ -111,7 +111,6 @@ def generate_d3_code(df: pd.DataFrame, api_key: str, user_input: str = "") -> st
     """
     
     if user_input:
-    prompt = f"{base_prompt}\n\nAdditional user request: {user_input}" if user_input else base_prompt
         prompt = f"""
         # Data Visualization Task
         ## Current Code
