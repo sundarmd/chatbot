@@ -231,9 +231,12 @@ def display_visualization(d3_code: str):
     <script src="https://d3js.org/d3.v7.min.js"></script>
     <script>
         {d3_code}
+        // Ensure the data is available in the scope
         const data = {json.dumps(st.session_state.preprocessed_df.to_dict(orient='records'))};
+        // Create the SVG element
         const svg = d3.select("#visualization").append("svg");
-        createVisualization(data, svg);
+        // Call the createVisualization function
+        createVisualization(data, svg.node());
     </script>
     """, height=600)
 
