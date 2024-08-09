@@ -248,57 +248,57 @@ def generate_fallback_visualization() -> str:
     
     fallback_code = """
     function createVisualization(data, svgElement) {
-        const margin = {top: 20, right: 20, bottom: 30, left: 40};
+        const margin = { top: 20, right: 20, bottom: 50, left: 50 };
         const width = 800 - margin.left - margin.right;
         const height = 500 - margin.top - margin.bottom;
-
-        const x = d3.scaleLinear()
-            .range([0, width]);
-
-        const y = d3.scaleLinear()
-            .range([height, 0]);
-
-        const color = d3.scaleOrdinal(d3.schemeCategory10);
-
-        const g = svgElement.append("g")
+        
+        svgElement.attr("width", width + margin.left + margin.right)
+                   .attr("height", height + margin.top + margin.bottom);
+        
+        const svg = svgElement.append("g")
             .attr("transform", `translate(${margin.left},${margin.top})`);
 
-        // Dynamically select the first two numeric columns
-        const numericColumns = Object.keys(data[0]).filter(key => typeof data[0][key] === 'number');
-        const xColumn = numericColumns[0];
-        const yColumn = numericColumns[1];
+        // Assuming the first column is for x-axis and second for y-axis
+        const xKey = Object.keys(data[0])[0];
+        const yKey = Object.keys(data[0])[1];
 
-        x.domain(d3.extent(data, d => d[xColumn]));
-        y.domain(d3.extent(data, d => d[yColumn]));
+        const xScale = d3.scaleBand()
+            .domain(data.map(d => d[xKey]))
+            .range([0, width])
+            .padding(0.1);
 
-        g.selectAll("circle")
+        const yScale = d3.scaleLinear()
+            .domain([0, d3.max(data, d => +d[yKey])])
+            .range([height, 0]);
+
+        svg.selectAll("rect")
             .data(data)
-            .enter().append("circle")
-            .attr("cx", d => x(d[xColumn]))
-            .attr("cy", d => y(d[yColumn]))
-            .attr("r", 5)
-            .attr("fill", d => color(d.Source));
+            .join("rect")
+            .attr("x", d => xScale(d[xKey]))
+            .attr("y", d => yScale(+d[yKey]))
+            .attr("width", xScale.bandwidth())
+            .attr("height", d => height - yScale(+d[yKey]))
+            .attr("fill", "steelblue");
 
-        g.append("g")
-            .attr("transform", `translate(0,${height})`)
-            .call(d3.axisBottom(x));
+        svg.append("g")
+            .attr("transform", `translate(0, ${height})`)
+            .call(d3.axisBottom(xScale));
 
-        g.append("g")
-            .call(d3.axisLeft(y));
+        svg.append("g")
+            .call(d3.axisLeft(yScale));
 
-        g.append("text")
+        svg.append("text")
             .attr("x", width / 2)
-            .attr("y", height + margin.bottom)
-            .style("text-anchor", "middle")
-            .text(xColumn);
+            .attr("y", height + margin.top + 20)
+            .attr("text-anchor", "middle")
+            .text(xKey);
 
-        g.append("text")
+        svg.append("text")
             .attr("transform", "rotate(-90)")
-            .attr("y", 0 - margin.left)
-            .attr("x", 0 - (height / 2))
-            .attr("dy", "1em")
-            .style("text-anchor", "middle")
-            .text(yColumn);
+            .attr("x", -height / 2)
+            .attr("y", -margin.left + 20)
+            .attr("text-anchor", "middle")
+            .text(yKey);
     }
     """
     
