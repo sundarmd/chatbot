@@ -97,12 +97,42 @@ def generate_d3_code(df: pd.DataFrame, api_key: str, user_input: str = "") -> st
     11. Add accessibility features such as ARIA labels.
     12. Implement data sampling for large datasets.
     13. Use relative positioning for tooltips.
+    14. Use D3.js version 7
+    15. The implementation should create a function `createVisualization(data)`, which accepts the data as a parameter
+    16. Assume an SVG element has already been created
 
     Return only the D3.js code without any explanations.
     """
     
+    if user_input:
     prompt = f"{base_prompt}\n\nAdditional user request: {user_input}" if user_input else base_prompt
-
+        prompt = f"""
+        # Data Visualization Task
+        ## Current Code
+        We currently have this D3 code to generate a visualization of the data:
+        ```javascript
+        {st.session_state.current_viz}
+        ```
+        ## Dataset Description
+        {schema_str}
+        ## Task
+        We need to modify the code above to satisfy this user prompt:
+        ---
+        {user_input}
+        ---
+        The prompt might mention an issue with the current visualization, or ask for an enhancement.
+        You may need to rewrite the code significantly or refactor it. It's possible the current
+        code is incorrect, or needs a major change to address the user's prompt.
+        Don't make any changes to the visualization that were not explicitly requested by the user.
+        ## Technical Implementation
+        - Use D3.js version 7
+        - The implementation should create a function `createVisualization(data)`, which accepts the data as a parameter
+        - Assume an SVG element has already been created
+        Return only the modified D3.js code without any explanations.
+        """
+    else:
+        prompt = base_prompt
+    
     try:
         response = client.chat.completions.create(
             model="gpt-3.5-turbo",
@@ -189,7 +219,7 @@ def main():
             
             if 'current_viz' not in st.session_state or st.session_state.current_viz is None:
                 with st.spinner("Generating initial visualization..."):
-                    initial_d3_code = generate_d3_code(merged_df)
+                    initial_d3_code = generate_d3_code(merged_df, api_key )
                 st.session_state.current_viz = initial_d3_code
                 st.session_state.workflow_history.append({
                     "request": "Initial comparative visualization",
@@ -205,7 +235,7 @@ def main():
             if st.button("Update Visualization"):
                 if user_input:
                     with st.spinner("Generating updated visualization..."):
-                        modified_d3_code = generate_d3_code(merged_df, user_input)
+                        modified_d3_code = generate_d3_code(merged_df,api_key, user_input)
                     st.session_state.current_viz = modified_d3_code
                     st.session_state.workflow_history.append({
                         "request": user_input,
