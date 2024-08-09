@@ -9,6 +9,7 @@ from typing import Optional, Dict, List
 import re
 import pyLDAvis
 from streamlit import components
+import tempfile
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -227,22 +228,38 @@ def clean_d3_response(response: str) -> str:
     return '\n'.join(clean_lines)
 
 def display_visualization(d3_code: str) -> str:
-    """Generate the HTML content for displaying the D3.js visualization."""
+    """Generate an HTML file for displaying the D3.js visualization and return its path."""
     html_content = f"""
-    <div id="visualization"></div>
-    <script src="https://d3js.org/d3.v7.min.js"></script>
-    <script>
-    (function() {{
-        const data = {json.dumps(st.session_state.preprocessed_df)};
-        const svgElement = d3.select("#visualization").append("svg")
-            .attr("width", 800)
-            .attr("height", 500);
-        {d3_code}
-        createVisualization(data, svgElement);
-    }})();
-    </script>
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <script src="https://d3js.org/d3.v7.min.js"></script>
+        <style>
+            body {{ margin: 0; padding: 0; }}
+            #visualization {{ width: 100%; height: 100%; }}
+        </style>
+    </head>
+    <body>
+        <div id="visualization"></div>
+        <script>
+        (function() {{
+            const data = {json.dumps(st.session_state.preprocessed_df)};
+            const svgElement = d3.select("#visualization").append("svg")
+                .attr("width", "100%")
+                .attr("height", "100%")
+                .attr("viewBox", "0 0 800 500");
+            {d3_code}
+            createVisualization(data, svgElement);
+        }})();
+        </script>
+    </body>
+    </html>
     """
-    return html_content
+    
+    # Create a temporary file to store the HTML content
+    with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".html") as f:
+        f.write(html_content)
+        return f.name
 
 def generate_fallback_visualization() -> str:
     """Generate a fallback visualization if the LLM fails."""
@@ -318,7 +335,7 @@ def generate_and_validate_d3_code(df: pd.DataFrame, api_key: str, user_input: st
         return refine_d3_code(cleaned_code, api_key)
 
 def main():
-    st.set_page_config(page_title="ChartChat",page_icon="✨", layout="wide")
+    st.set_page_config(page_title="ChartChat", page_icon="✨", layout="wide")
     st.title("ChartChat")
 
     api_key = get_api_key()
@@ -350,8 +367,8 @@ def main():
                     })
 
             st.subheader("Current Visualization")
-            html_string = pyLDAvis.prepared_data_to_html(st.session_state.current_viz)
-            components.v1.html(html_string, width=1300, height=800, scrolling=True)
+            viz_path = display_visualization(st.session_state.current_viz)
+            st.components.v1.iframe(viz_path, width=820, height=520)
 
             st.subheader("Modify Visualization")
             user_input = st.text_area("Enter your modification request:", height=100)
