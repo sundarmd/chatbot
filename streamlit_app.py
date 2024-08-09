@@ -6,10 +6,14 @@ import json
 import logging
 import traceback
 from typing import Optional, Dict, List
+import re
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Define MAX_WORKFLOW_HISTORY constant
+MAX_WORKFLOW_HISTORY = 10
 
 # Initialize session state
 if 'workflow_history' not in st.session_state:
@@ -38,7 +42,7 @@ def test_api_key(api_key: str) -> bool:
         logger.error(f"API key validation failed: {str(e)}")
         return False
 
-def preprocess_data(file1: st.UploadedFile, file2: st.UploadedFile) -> pd.DataFrame:
+def preprocess_data(file1, file2) -> pd.DataFrame:
     """Preprocess and merge the two dataframes for comparison."""
     logger.info("Starting data preprocessing")
     try:
@@ -77,6 +81,23 @@ def preprocess_data(file1: st.UploadedFile, file2: st.UploadedFile) -> pd.DataFr
         logger.error(f"Error in data preprocessing: {str(e)}")
         raise
 
+def validate_d3_code(code: str) -> bool:
+    """Perform basic validation on the generated D3 code."""
+    # Check if the code defines the createVisualization function
+    if not re.search(r'function\s+createVisualization\s*\(data,\s*svgElement\)\s*{', code):
+        return False
+    
+    # Check for basic D3 v7 method calls
+    d3_methods = ['d3.select', 'd3.scaleLinear', 'd3.axisBottom', 'd3.axisLeft']
+    if not any(method in code for method in d3_methods):
+        return False
+    
+    # Check for balanced braces
+    if code.count('{') != code.count('}'):
+        return False
+    
+    return True
+
 def generate_d3_code(df: pd.DataFrame, api_key: str, user_input: str = "") -> str:
     """Generate D3.js code using OpenAI API with emphasis on comparison."""
     logger.info("Starting D3 code generation")
@@ -87,58 +108,50 @@ def generate_d3_code(df: pd.DataFrame, api_key: str, user_input: str = "") -> st
     client = OpenAI(api_key=api_key)
     
     base_prompt = f"""
-    Create a D3.js visualization that compares data from two CSV files based on the following schema:
+    # D3.js Code Generation Task
 
-    {schema_str}
-
-    Data sample:
-    {json.dumps(data_sample[:5], indent=2)}
+    Your task is to generate ONLY D3.js code version 7. Do not include any explanations, comments, or markdown formatting.
 
     Requirements:
-    1. Create a chart that clearly shows the comparison between 'CSV file 1' and 'CSV file 2'.
-    2. Use different colors or patterns to distinguish between the two data sources.
-    3. Include a legend to identify which elements correspond to each CSV file.
-    4. Add clear and informative labels for axes and the chart title.
-    5. Implement basic interactivity (e.g., tooltips on hover) to show detailed information.
-    6. Ensure the chart is responsive and fits within an 800x500 pixel area.
-    7. Handle potential null or undefined values gracefully.
-    8. Include grid lines and appropriate scales for better readability.
-    9. Use D3.js version 7 syntax.
-    10. Wrap the entire D3 code in a function named createVisualization(data).
-    11. Add accessibility features such as ARIA labels.
-    12. Implement data sampling for large datasets.
-    13. Use relative positioning for tooltips.
-    14. Use D3.js version 7
-    15. The implementation should create a function `createVisualization(data)`, which accepts the data as a parameter
-    16. Assume an SVG element has already been created
+    1. Create a function named createVisualization(data, svgElement)
+    2. Implement a visualization that compares data from two CSV files
+    3. Use D3.js version 7 syntax
 
-    Return only the D3.js code without any explanations.
+    Data Schema:
+    {schema_str}
+
+    Sample Data:
+    {json.dumps(data_sample[:5], indent=2)}
+
+    IMPORTANT: Your entire response must be valid D3.js code that can be executed directly. Do not include any text before or after the code.
     """
     
     if user_input:
         prompt = f"""
-        # Data Visualization Task
-        ## Current Code
-        We currently have this D3 code to generate a visualization of the data:
-        ```javascript
-        {st.session_state.current_viz}
-        ```
-        ## Dataset Description
-        {schema_str}
-        ## Task
-        We need to modify the code above to satisfy this user prompt:
+        # D3.js Code Generation Task
+
+        Your task is to generate ONLY D3.js code version 7. Do not include any explanations, comments, or markdown formatting.
+
+        Requirements:
+        1. Create a function named createVisualization(data, svgElement)
+        2. Implement a visualization that satisfies this user prompt:
         ---
         {user_input}
         ---
-        The prompt might mention an issue with the current visualization, or ask for an enhancement.
-        You may need to rewrite the code significantly or refactor it. It's possible the current
-        code is incorrect, or needs a major change to address the user's prompt.
-        Don't make any changes to the visualization that were not explicitly requested by the user.
-        ## Technical Implementation
-        - Use D3.js version 7
-        - The implementation should create a function `createVisualization(data)`, which accepts the data as a parameter
-        - Assume an SVG element has already been created
-        Return only the modified D3.js code without any explanations.
+        3. Use D3.js version 7 syntax
+
+        Data Schema:
+        {schema_str}
+
+        Sample Data:
+        {json.dumps(data_sample[:5], indent=2)}
+
+        Current Code:
+        ```javascript
+        {st.session_state.current_viz}
+        ```
+
+        IMPORTANT: Your entire response must be valid D3.js code that can be executed directly. Do not include any text before or after the code.
         """
     else:
         prompt = base_prompt
@@ -156,34 +169,60 @@ def generate_d3_code(df: pd.DataFrame, api_key: str, user_input: str = "") -> st
         if not d3_code.strip():
             raise ValueError("Generated D3 code is empty")
         
-        return postprocess_d3_code(d3_code)
+        return d3_code
     except Exception as e:
         logger.error(f"Error generating D3 code: {str(e)}")
-        return generate_fallback_visualization(df)
+        return generate_fallback_visualization()  # Remove df parameter
 
-def postprocess_d3_code(code: str) -> str:
-    """Post-process the generated D3.js code to catch common issues."""
-    # Remove the outer function if it exists
-    if code.startswith("function createVisualization(data) {"):
-        code = code[len("function createVisualization(data) {"):-1].strip()
+def refine_d3_code(initial_code: str, api_key: str, max_attempts: int = 3) -> str:
+    """Refine the D3 code through iterative LLM calls if necessary."""
+    client = OpenAI(api_key=api_key)
     
-    # Replace unsupported d3.event with d3.pointer
-    code = code.replace("d3.event", "d3.pointer(event)")
+    for attempt in range(max_attempts):
+        if validate_d3_code(initial_code):
+            return initial_code
+        
+        refinement_prompt = f"""
+        The following D3 code needs refinement to be valid:
+        
+        {initial_code}
+        
+        Please provide a corrected version that:
+        1. Defines a createVisualization(data, svgElement) function
+        2. Uses only D3.js version 7 syntax
+        3. Creates a valid visualization
+        
+        Return ONLY the corrected D3 code without any explanations or comments.
+        """
+        
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "You are a D3.js expert. Provide only valid D3 code."},
+                {"role": "user", "content": refinement_prompt}
+            ]
+        )
+        
+        initial_code = clean_d3_response(response.choices[0].message.content)
     
-    # Ensure color scale is defined if used
-    if "colorScale(" in code and "const colorScale = " not in code:
-        code = "const colorScale = d3.scaleOrdinal(d3.schemeCategory10);\n" + code
+    # If we've exhausted our attempts, return the last attempt
+    logger.warning("Failed to generate valid D3 code after maximum attempts")
+    return initial_code
+
+def clean_d3_response(response: str) -> str:
+    """Clean the LLM response to ensure it only contains D3 code."""
+    # Remove any potential markdown code blocks
+    response = response.replace("```javascript", "").replace("```", "")
     
-    # Add error checking for data structure
-    code = "console.log(data[0]);\n" + code
+    # Remove any lines that don't look like JavaScript
+    clean_lines = [line for line in response.split('\n') if line.strip() and not line.strip().startswith('#')]
     
-    # Add data sampling for large datasets
-    code = """
-    const sampleSize = 1000;
-    const sampledData = data.length > sampleSize ? data.slice(0, sampleSize) : data;
-    """ + code.replace("data", "sampledData")
+    # Ensure the code starts with the createVisualization function
+    if not any(line.strip().startswith('function createVisualization') for line in clean_lines):
+        clean_lines.insert(0, 'function createVisualization(data, svgElement) {')
+        clean_lines.append('}')
     
-    return code
+    return '\n'.join(clean_lines)
 
 def display_visualization(d3_code: str) -> str:
     """Generate the HTML content for displaying the D3.js visualization."""
@@ -193,20 +232,91 @@ def display_visualization(d3_code: str) -> str:
     <script>
     (function() {{
         const data = {json.dumps(st.session_state.preprocessed_df)};
+        const svgElement = d3.select("#visualization").append("svg")
+            .attr("width", 800)
+            .attr("height", 500);
         {d3_code}
-        createVisualization(data);
+        createVisualization(data, svgElement);
     }})();
     </script>
     """
     return html_content
 
-def generate_fallback_visualization(df: pd.DataFrame) -> str:
+def generate_fallback_visualization() -> str:
     """Generate a fallback visualization if the LLM fails."""
-    # Implement a simple bar chart or scatter plot here
-    pass
+    logger.info("Generating fallback visualization")
+    
+    fallback_code = """
+    function createVisualization(data, svgElement) {
+        const margin = {top: 20, right: 20, bottom: 30, left: 40};
+        const width = 800 - margin.left - margin.right;
+        const height = 500 - margin.top - margin.bottom;
+
+        const x = d3.scaleLinear()
+            .range([0, width]);
+
+        const y = d3.scaleLinear()
+            .range([height, 0]);
+
+        const color = d3.scaleOrdinal(d3.schemeCategory10);
+
+        const g = svgElement.append("g")
+            .attr("transform", `translate(${margin.left},${margin.top})`);
+
+        // Dynamically select the first two numeric columns
+        const numericColumns = Object.keys(data[0]).filter(key => typeof data[0][key] === 'number');
+        const xColumn = numericColumns[0];
+        const yColumn = numericColumns[1];
+
+        x.domain(d3.extent(data, d => d[xColumn]));
+        y.domain(d3.extent(data, d => d[yColumn]));
+
+        g.selectAll("circle")
+            .data(data)
+            .enter().append("circle")
+            .attr("cx", d => x(d[xColumn]))
+            .attr("cy", d => y(d[yColumn]))
+            .attr("r", 5)
+            .attr("fill", d => color(d.Source));
+
+        g.append("g")
+            .attr("transform", `translate(0,${height})`)
+            .call(d3.axisBottom(x));
+
+        g.append("g")
+            .call(d3.axisLeft(y));
+
+        g.append("text")
+            .attr("x", width / 2)
+            .attr("y", height + margin.bottom)
+            .style("text-anchor", "middle")
+            .text(xColumn);
+
+        g.append("text")
+            .attr("transform", "rotate(-90)")
+            .attr("y", 0 - margin.left)
+            .attr("x", 0 - (height / 2))
+            .attr("dy", "1em")
+            .style("text-anchor", "middle")
+            .text(yColumn);
+    }
+    """
+    
+    logger.info("Fallback visualization generated successfully")
+    return fallback_code
+
+def generate_and_validate_d3_code(df: pd.DataFrame, api_key: str, user_input: str = "") -> str:
+    """Generate, validate, and if necessary, refine D3 code."""
+    initial_code = generate_d3_code(df, api_key, user_input)
+    cleaned_code = clean_d3_response(initial_code)
+    
+    if validate_d3_code(cleaned_code):
+        return cleaned_code
+    else:
+        return refine_d3_code(cleaned_code, api_key)
 
 def main():
-    st.set_page_config(page_title="ChartChat", layout="wide")
+    st.set_page_config(page_title="ChartChat",page_icon="✨", layout="wide")
     st.title("ChartChat")
 
     api_key = get_api_key()
@@ -228,13 +338,13 @@ def main():
                 st.dataframe(merged_df.head())
             
             if 'current_viz' not in st.session_state or st.session_state.current_viz is None:
-                with st.spinner("Generating initial visualization..."):
-                    initial_d3_code = generate_d3_code(merged_df, api_key )
-                st.session_state.current_viz = initial_d3_code
-                st.session_state.workflow_history.append({
-                    "request": "Initial comparative visualization",
-                    "code": initial_d3_code
-                })
+                with st.spinner("Generating D3 visualization..."):
+                    d3_code = generate_and_validate_d3_code(merged_df, api_key)
+                    st.session_state.current_viz = d3_code
+                    st.session_state.workflow_history.append({
+                        "request": "Initial comparative visualization",
+                        "code": d3_code
+                    })
 
             st.subheader("Current Visualization")
             st.components.v1.html(display_visualization(st.session_state.current_viz), height=600)
@@ -245,7 +355,7 @@ def main():
             if st.button("Update Visualization"):
                 if user_input:
                     with st.spinner("Generating updated visualization..."):
-                        modified_d3_code = generate_d3_code(merged_df,api_key, user_input)
+                        modified_d3_code = generate_and_validate_d3_code(merged_df, api_key, user_input)
                     st.session_state.current_viz = modified_d3_code
                     st.session_state.workflow_history.append({
                         "request": user_input,
@@ -263,15 +373,18 @@ def main():
                 with col2:
                     if st.button("Execute Code"):
                         if edit_enabled:
-                            st.session_state.current_viz = code_editor
-                            st.session_state.workflow_history.append({
-                                "request": "Manual code edit",
-                                "code": code_editor
-                            })
-                            if len(st.session_state.workflow_history) > MAX_WORKFLOW_HISTORY:
-                                st.session_state.workflow_history.pop(0)
-                            st.empty()  # Clear the previous visualization
-                            st.components.v1.html(display_visualization(st.session_state.current_viz), height=600)
+                            if validate_d3_code(code_editor):
+                                st.session_state.current_viz = code_editor
+                                st.session_state.workflow_history.append({
+                                    "request": "Manual code edit",
+                                    "code": code_editor
+                                })
+                                if len(st.session_state.workflow_history) > MAX_WORKFLOW_HISTORY:
+                                    st.session_state.workflow_history.pop(0)
+                                st.empty()  # Clear the previous visualization
+                                st.components.v1.html(display_visualization(st.session_state.current_viz), height=600)
+                            else:
+                                st.error("Invalid D3.js code. Please check your code and try again.")
                         else:
                             st.warning("Enable 'Edit' to make changes.")
                 with col3:
