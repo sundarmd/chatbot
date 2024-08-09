@@ -7,7 +7,6 @@ import logging
 import traceback
 from typing import Optional, Dict, List
 import re
-from streamlit_d3_demo import d3_line
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -226,8 +225,17 @@ def clean_d3_response(response: str) -> str:
     return '\n'.join(clean_lines)
 
 def display_visualization(d3_code: str):
-    """Display the D3.js visualization using streamlit-d3-demo."""
-    d3_line(d3_code=d3_code, data=st.session_state.preprocessed_df, width=800, height=500)
+    """Display the D3.js visualization using Streamlit components."""
+    st.components.v1.html(f"""
+    <div id="visualization"></div>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script>
+        {d3_code}
+        const data = {json.dumps(st.session_state.preprocessed_df.to_dict(orient='records'))};
+        const svg = d3.select("#visualization").append("svg");
+        createVisualization(data, svg);
+    </script>
+    """, height=600)
 
 def generate_fallback_visualization() -> str:
     """Generate a fallback visualization if the LLM fails."""
