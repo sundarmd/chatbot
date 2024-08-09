@@ -7,9 +7,6 @@ import logging
 import traceback
 from typing import Optional, Dict, List
 import re
-import pyLDAvis
-from streamlit import components
-import tempfile
 from streamlit_d3_demo import d3_line
 
 # Configure logging
@@ -176,7 +173,7 @@ def generate_d3_code(df: pd.DataFrame, api_key: str, user_input: str = "") -> st
         return d3_code
     except Exception as e:
         logger.error(f"Error generating D3 code: {str(e)}")
-        return generate_fallback_visualization()  # Remove df parameter
+        return generate_fallback_visualization()
 
 def refine_d3_code(initial_code: str, api_key: str, max_attempts: int = 3) -> str:
     """Refine the D3 code through iterative LLM calls if necessary."""
@@ -229,8 +226,8 @@ def clean_d3_response(response: str) -> str:
     return '\n'.join(clean_lines)
 
 def display_visualization(d3_code: str):
-    """Display the D3.js visualization using streamlit-D3-demo."""
-    d3_line(d3_code, st.session_state.preprocessed_df, 800, 500)
+    """Display the D3.js visualization using streamlit-d3-demo."""
+    d3_line(d3_code=d3_code, data=st.session_state.preprocessed_df, width=800, height=500)
 
 def generate_fallback_visualization() -> str:
     """Generate a fallback visualization if the LLM fails."""
@@ -322,7 +319,7 @@ def main():
         try:
             with st.spinner("Preprocessing data..."):
                 merged_df = preprocess_data(file1, file2)
-            st.session_state.preprocessed_df = merged_df.to_dict(orient='records')
+            st.session_state.preprocessed_df = merged_df
             
             with st.expander("Preview of preprocessed data"):
                 st.dataframe(merged_df.head())
@@ -375,6 +372,7 @@ def main():
                                 if len(st.session_state.workflow_history) > MAX_WORKFLOW_HISTORY:
                                     st.session_state.workflow_history.pop(0)
                                 st.empty()  # Clear the previous visualization
+                                display_visualization(st.session_state.current_viz)
                                 st.components.v1.html(display_visualization(st.session_state.current_viz), height=600)
                             else:
                                 st.error("Invalid D3.js code. Please check your code and try again.")
