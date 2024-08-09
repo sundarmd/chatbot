@@ -7,6 +7,8 @@ import logging
 import traceback
 from typing import Optional, Dict, List
 import re
+import pyLDAvis
+from streamlit import components
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -348,7 +350,8 @@ def main():
                     })
 
             st.subheader("Current Visualization")
-            st.components.v1.html(display_visualization(st.session_state.current_viz), height=600)
+            html_string = pyLDAvis.prepared_data_to_html(st.session_state.current_viz)
+            components.v1.html(html_string, width=1300, height=800, scrolling=True)
 
             st.subheader("Modify Visualization")
             user_input = st.text_area("Enter your modification request:", height=100)
